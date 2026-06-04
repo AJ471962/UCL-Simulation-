@@ -50,19 +50,6 @@ function getPot(teamName) {
 function generateDraw() {
   fixtures = [];
 
-  function isValidMatch(a, b) {
-  if (a.name === b.name) return false;
-
-  // prevent same pot clash
-  if (a.pot === b.pot) return false;
-
-  if (a.opponents.includes(b.name)) return false;
-
-  return true;
-  }
-
-  const matchdays = 8;
-
   let matchId = 0;
 
   let pool = teams.map(t => ({
@@ -72,20 +59,11 @@ function generateDraw() {
     playedCount: 0
   }));
 
-  function availableOpponent(team, usedThisDay) {
-    return pool.find(op =>
-      op.name !== team.name &&
-      !team.opponents.includes(op.name) &&
-      !usedThisDay.has(op.name) &&
-      op.playedCount < 8 &&
-      team.playedCount < 8
-    );
-  }
+  const matchdays = 8;
 
   for (let day = 1; day <= matchdays; day++) {
 
     let usedThisDay = new Set();
-
     let dayMatches = [];
 
     for (let i = 0; i < pool.length; i++) {
@@ -94,31 +72,32 @@ function generateDraw() {
 
       if (usedThisDay.has(teamA.name)) continue;
 
-      let teamB = availableOpponent(teamA, usedThisDay);
+      let opponent = pool.find(op =>
+        op.name !== teamA.name &&
+        !teamA.opponents.includes(op.name) &&
+        !usedThisDay.has(op.name) &&
+        teamA.playedCount < 8 &&
+        op.playedCount < 8
+      );
 
-      if (!teamB) continue;
+      if (!opponent) continue;
 
-      teamA.opponents.push(teamB.name);
-      teamB.opponents.push(teamA.name);
+      teamA.opponents.push(opponent.name);
+      opponent.opponents.push(teamA.name);
 
       teamA.playedCount++;
-      teamB.playedCount++;
+      opponent.playedCount++;
 
       usedThisDay.add(teamA.name);
-      usedThisDay.add(teamB.name);
+      usedThisDay.add(opponent.name);
 
       dayMatches.push({
-  id: matchId++,
-  matchday: day,
-  home: teamA.name,
-  away: teamB.name,
-  hg: "",
-  ag: ""
-});
+        id: matchId++,
+        matchday: day,
+        home: teamA.name,
+        away: opponent.name
+      });
     }
-
-    // add matchday header marker
-    fixtures.push({ header: true, matchday: day });
 
     fixtures.push(...dayMatches);
   }
