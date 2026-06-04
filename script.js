@@ -42,9 +42,24 @@ let teams = [
 
 let fixtures = [];
 
+function getPot(teamName) {
+  return teams.find(t => t.name === teamName)?.pot;
+}
+
 // DRAW
 function generateDraw() {
   fixtures = [];
+
+  function isValidMatch(a, b) {
+  if (a.name === b.name) return false;
+
+  // prevent same pot clash
+  if (a.pot === b.pot) return false;
+
+  if (a.opponents.includes(b.name)) return false;
+
+  return true;
+  }
 
   const matchdays = 8;
 
@@ -131,25 +146,24 @@ function renderFixtures() {
         <h2>Matchday ${day}</h2>
     `;
 
-    grouped[day].forEach(match => {
+    fixtures.forEach(f => {
 
-      html += `
-        <div style="margin:8px 0;">
-          ${match.home}
+  if (!f || !f.home || !f.away) return;
 
-          <input type="number" id="hg-${match.id}" style="width:50px;">
+  html += `
+    <div style="margin:8px 0;">
+      ${f.home}
 
-          -
+      <input type="number" id="hg-${f.id}" style="width:50px;">
 
-          <input type="number" id="ag-${match.id}" style="width:50px;">
+      -
 
-          ${match.away}
-        </div>
-      `;
-    });
+      <input type="number" id="ag-${f.id}" style="width:50px;">
 
-    html += `</div>`;
-  });
+      ${f.away}
+    </div>
+  `;
+});
 
   document.getElementById("fixtures").innerHTML = html;
 }
@@ -172,8 +186,13 @@ function calculateTable() {
 
   fixtures.forEach((f, i) => {
 
-    let hg = parseInt(document.getElementById("hg-" + f.id)?.value) || 0;
-let ag = parseInt(document.getElementById("ag-" + f.id)?.value) || 0;
+    let hgInput = document.getElementById("hg-" + f.id);
+let agInput = document.getElementById("ag-" + f.id);
+
+if (!hgInput || !agInput) return;
+
+let hg = parseInt(hgInput.value) || 0;
+let ag = parseInt(agInput.value) || 0;
     let home = table[f.home];
     let away = table[f.away];
 
