@@ -46,79 +46,81 @@ let fixtures = [];
 function generateDraw() {
   fixtures = [];
 
-  let matchdays = 8;
+  const matchdays = 8;
 
-  let teamsCopy = teams.map(t => ({
+  let pool = teams.map(t => ({
     name: t.name,
     pot: t.pot,
-    played: [],
-    matchesLeft: 8
+    opponents: [],
+    playedCount: 0
   }));
 
-  function canPair(a, b, day) {
-    if (a.name === b.name) return false;
-    if (a.played.includes(b.name)) return false;
-    if (a.matchesLeft <= 0 || b.matchesLeft <= 0) return false;
-    return true;
+  function availableOpponent(team, usedThisDay) {
+    return pool.find(op =>
+      op.name !== team.name &&
+      !team.opponents.includes(op.name) &&
+      !usedThisDay.has(op.name) &&
+      op.playedCount < 8 &&
+      team.playedCount < 8
+    );
   }
 
   for (let day = 1; day <= matchdays; day++) {
 
     let usedThisDay = new Set();
 
-    for (let i = 0; i < teamsCopy.length; i++) {
+    let dayMatches = [];
 
-      let teamA = teamsCopy[i];
+    for (let i = 0; i < pool.length; i++) {
+
+      let teamA = pool[i];
 
       if (usedThisDay.has(teamA.name)) continue;
 
-      for (let j = i + 1; j < teamsCopy.length; j++) {
+      let teamB = availableOpponent(teamA, usedThisDay);
 
-        let teamB = teamsCopy[j];
+      if (!teamB) continue;
 
-        if (usedThisDay.has(teamB.name)) continue;
+      teamA.opponents.push(teamB.name);
+      teamB.opponents.push(teamA.name);
 
-        if (canPair(teamA, teamB, day)) {
+      teamA.playedCount++;
+      teamB.playedCount++;
 
-          fixtures.push({
-            matchday: day,
-            home: teamA.name,
-            away: teamB.name,
-            hg: "",
-            ag: ""
-          });
+      usedThisDay.add(teamA.name);
+      usedThisDay.add(teamB.name);
 
-          teamA.played.push(teamB.name);
-          teamB.played.push(teamA.name);
-
-          teamA.matchesLeft--;
-          teamB.matchesLeft--;
-
-          usedThisDay.add(teamA.name);
-          usedThisDay.add(teamB.name);
-
-          break;
-        }
-      }
+      dayMatches.push({
+        matchday: day,
+        home: teamA.name,
+        away: teamB.name,
+        hg: "",
+        ag: ""
+      });
     }
+
+    // add matchday header marker
+    fixtures.push({ header: true, matchday: day });
+
+    fixtures.push(...dayMatches);
   }
 
   renderFixtures();
 }
+  
 
 // SHOW FIXTURES + INPUT BOXES
 function renderFixtures() {
   let html = "";
 
-  fixtures.forEach((f, i) => {
-    html += `
-      <p>
-        ${f.home} vs ${f.away}
-        <input type="number" id="hg${i}" placeholder="H">
-        -
-        <input type="number" id="ag${i}" placeholder="A">
-      </p>
-    `;
+  fixtures.forEach(f => {
+
+    if (f.header) {
+      html += `<h2>Matchday ${f.matchday}</h2>`;
+    } else {
+      html += `<p>${f.home} vs ${f.away}</p>`;
+    }
+
   });
 
   document.getElementById("fixtures").innerHTML = html;
