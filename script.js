@@ -111,30 +111,40 @@ function generateDraw() {
 
 // SHOW FIXTURES + INPUT BOXES
 function renderFixtures() {
-  let html = "";
 
+  let grouped = {};
+
+  // 1. Group fixtures by matchday
   fixtures.forEach(f => {
+    if (f.header) return;
 
-    if (f.header) {
-      html += `
-        <div style="
-          margin-top:20px;
-          padding:10px;
-          background:#222;
-          border-left:4px solid #00ff88;
-        ">
-          <h2>Matchday ${f.matchday}</h2>
-        </div>
-      `;
-    } 
-    else {
-      html += `
-        <div style="padding:5px 10px;">
-          ${f.home} vs ${f.away}
-        </div>
-      `;
+    if (!grouped[f.matchday]) {
+      grouped[f.matchday] = [];
     }
 
+    grouped[f.matchday].push(f);
+  });
+
+  // 2. Render clean structure
+  let html = "";
+
+  Object.keys(grouped).forEach(day => {
+
+    html += `
+      <div style="
+        margin-top:20px;
+        padding:10px;
+        background:#222;
+        border-left:4px solid #00ff88;
+      ">
+        <h2>Matchday ${day}</h2>
+    `;
+
+    grouped[day].forEach(match => {
+      html += `<div>${match.home} vs ${match.away}</div>`;
+    });
+
+    html += `</div>`;
   });
 
   document.getElementById("fixtures").innerHTML = html;
