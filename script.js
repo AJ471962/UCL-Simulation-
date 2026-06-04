@@ -46,49 +46,48 @@ let fixtures = [];
 function generateDraw() {
   fixtures = [];
 
-  let pools = {
-    1: shuffleArray(teams.filter(t => t.pot === 1)),
-    2: shuffleArray(teams.filter(t => t.pot === 2)),
-    3: shuffleArray(teams.filter(t => t.pot === 3)),
-    4: shuffleArray(teams.filter(t => t.pot === 4))
-  };
+  let teamsCopy = teams.map(t => ({
+    name: t.name,
+    pot: t.pot,
+    matches: []
+  }));
 
-  let matchCount = {};
-  teams.forEach(t => matchCount[t.name] = 0);
+  function canPlay(a, b) {
+    if (a.name === b.name) return false;
 
-  function getAvailableOpponent(team, potList) {
-    return potList.find(opponent => {
-      return opponent.name !== team.name &&
-             matchCount[opponent.name] < 8 &&
-             matchCount[team.name] < 8;
-    });
+    if (a.matches.includes(b.name)) return false;
+
+    return true;
   }
 
-  for (let round = 0; round < 12; round++) {
+  function addMatch(a, b) {
+    if (a.matches.length >= 8 || b.matches.length >= 8) return false;
 
-    for (let p = 1; p <= 4; p++) {
+    a.matches.push(b.name);
+    b.matches.push(a.name);
 
-      let team = pools[p][round % pools[p].length];
-      if (!team) continue;
+    fixtures.push({
+      home: a.name,
+      away: b.name,
+      hg: "",
+      ag: ""
+    });
 
-      for (let q = p + 1; q <= 4; q++) {
+    return true;
+  }
 
-        let opponent = getAvailableOpponent(team, pools[q]);
-        if (!opponent) continue;
+  let attempts = 0;
 
-        if (matchCount[team.name] >= 8 || matchCount[opponent.name] >= 8) continue;
+  while (attempts < 5000) {
 
-        fixtures.push({
-          home: team.name,
-          away: opponent.name,
-          hg: "",
-          ag: ""
-        });
+    let a = teamsCopy[Math.floor(Math.random() * teamsCopy.length)];
+    let b = teamsCopy[Math.floor(Math.random() * teamsCopy.length)];
 
-        matchCount[team.name]++;
-        matchCount[opponent.name]++;
-      }
+    if (canPlay(a, b)) {
+      addMatch(a, b);
     }
+
+    attempts++;
   }
 
   renderFixtures();
