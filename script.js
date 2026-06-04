@@ -1,5 +1,4 @@
 let teams = [
-  // POT 1
   { name: "Real Madrid", pot: 1 },
   { name: "Manchester City", pot: 1 },
   { name: "Paris Saint-Germain", pot: 1 },
@@ -10,7 +9,6 @@ let teams = [
   { name: "Liverpool", pot: 1 },
   { name: "Chelsea", pot: 1 },
 
-  // POT 2
   { name: "Manchester United", pot: 2 },
   { name: "Borussia Dortmund", pot: 2 },
   { name: "Porto", pot: 2 },
@@ -21,7 +19,6 @@ let teams = [
   { name: "Atletico Madrid", pot: 2 },
   { name: "Real Betis", pot: 2 },
 
-  // POT 3
   { name: "Feyenoord", pot: 3 },
   { name: "RB Leipzig", pot: 3 },
   { name: "Shakhtar Donetsk", pot: 3 },
@@ -32,7 +29,6 @@ let teams = [
   { name: "AC Milan", pot: 3 },
   { name: "Juventus", pot: 3 },
 
-  // POT 4
   { name: "RB Salzburg", pot: 4 },
   { name: "Celtic", pot: 4 },
   { name: "Olympiacos", pot: 4 },
@@ -46,82 +42,122 @@ let teams = [
 
 let fixtures = [];
 
-// SHOW TEAMS BY POT
-function renderTeams() {
-  let html = "";
-
-  for (let p = 1; p <= 4; p++) {
-    html += `<h2>Pot ${p}</h2>`;
-
-    teams
-      .filter(t => t.pot === p)
-      .forEach((t, index) => {
-        html += `<p>${t.name}</p>`;
-      });
-  }
-
-  document.getElementById("teamList").innerHTML = html;
-}
-
-// SHUFFLE FUNCTION
-function shuffle(array) {
-  for (let i = array.length - 1; i > 0; i--) {
-    let j = Math.floor(Math.random() * (i + 1));
-    [array[i], array[j]] = [array[j], array[i]];
-  }
-}
-
-// UCL STYLE LEAGUE PHASE DRAW (SIMPLIFIED BUT REAL STRUCTURE)
+// DRAW
 function generateDraw() {
   fixtures = [];
 
-  let pot1 = shuffleArray(teams.filter(t => t.pot === 1));
-  let pot2 = shuffleArray(teams.filter(t => t.pot === 2));
-  let pot3 = shuffleArray(teams.filter(t => t.pot === 3));
-  let pot4 = shuffleArray(teams.filter(t => t.pot === 4));
+  let shuffled = [...teams];
+  shuffle(shuffled);
 
-  let allPots = [pot1, pot2, pot3, pot4];
-
-  // Each team gets 2 opponents per pot (simplified structure)
-  for (let i = 0; i < pot1.length; i++) {
-    let home = pot1[i];
-
-    let opponents = [
-      pot2[i],
-      pot3[i],
-      pot4[i]
-    ];
-
-    opponents.forEach(away => {
-      if (away) {
-        fixtures.push({
-          home: home.name,
-          away: away.name
-        });
-      }
-    });
+  for (let i = 0; i < shuffled.length; i += 2) {
+    if (shuffled[i + 1]) {
+      fixtures.push({
+        home: shuffled[i].name,
+        away: shuffled[i + 1].name,
+        hg: "",
+        ag: ""
+      });
+    }
   }
 
   renderFixtures();
 }
 
-// SHOW FIXTURES
+// SHOW FIXTURES + INPUT BOXES
 function renderFixtures() {
-  let html = "<h2>Fixtures</h2>";
+  let html = "";
 
   fixtures.forEach((f, i) => {
-    html += `<p>${i + 1}. ${f.home} vs ${f.away}</p>`;
+    html += `
+      <p>
+        ${f.home} vs ${f.away}
+        <input type="number" id="hg${i}" placeholder="H">
+        -
+        <input type="number" id="ag${i}" placeholder="A">
+      </p>
+    `;
   });
 
   document.getElementById("fixtures").innerHTML = html;
 }
 
-// helper
-function shuffleArray(arr) {
-  let copy = [...arr];
-  shuffle(copy);
-  return copy;
+// TABLE ENGINE
+function calculateTable() {
+
+  let table = {};
+
+  teams.forEach(t => {
+    table[t.name] = {
+      pts: 0,
+      w: 0,
+      d: 0,
+      l: 0,
+      gf: 0,
+      ga: 0
+    };
+  });
+
+  fixtures.forEach((f, i) => {
+
+    let hg = parseInt(document.getElementById("hg" + i).value) || 0;
+    let ag = parseInt(document.getElementById("ag" + i).value) || 0;
+
+    let home = table[f.home];
+    let away = table[f.away];
+
+    home.gf += hg;
+    home.ga += ag;
+
+    away.gf += ag;
+    away.ga += hg;
+
+    if (hg > ag) {
+      home.w++; home.pts += 3;
+      away.l++;
+    } else if (ag > hg) {
+      away.w++; away.pts += 3;
+      home.l++;
+    } else {
+      home.d++; away.d++;
+      home.pts += 1;
+      away.pts += 1;
+    }
+  });
+
+  let sorted = Object.entries(table).sort((a, b) => {
+    return b[1].pts - a[1].pts || (b[1].gf - b[1].ga) - (a[1].gf - a[1].ga);
+  });
+
+  renderTable(sorted);
 }
 
-// INIT
-renderTeams();
+// SHOW TABLE
+function renderTable(sorted) {
+  let html = "<table border='1' style='width:100%'><tr><th>Team</th><th>Pts</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th></tr>";
+
+  sorted.forEach(t => {
+    html += `
+      <tr>
+        <td>${t[0]}</td>
+        <td>${t[1].pts}</td>
+        <td>${t[1].w}</td>
+        <td>${t[1].d}</td>
+        <td>${t[1].l}</td>
+        <td>${t[1].gf}</td>
+        <td>${t[1].ga}</td>
+      </tr>
+    `;
+  });
+
+  html += "</table>";
+
+  document.getElementById("standings").innerHTML = html;
+}
+
+// shuffle helper
+function shuffle(array) {
+  for (let i = array.length - 1; i > 0; i--) {
+    let j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+                   }
