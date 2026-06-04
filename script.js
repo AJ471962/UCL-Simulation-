@@ -48,6 +48,8 @@ function generateDraw() {
 
   const matchdays = 8;
 
+  let matchId = 0;
+
   let pool = teams.map(t => ({
     name: t.name,
     pot: t.pot,
@@ -91,12 +93,13 @@ function generateDraw() {
       usedThisDay.add(teamB.name);
 
       dayMatches.push({
-        matchday: day,
-        home: teamA.name,
-        away: teamB.name,
-        hg: "",
-        ag: ""
-      });
+  id: matchId++,
+  matchday: day,
+  home: teamA.name,
+  away: teamB.name,
+  hg: "",
+  ag: ""
+});
     }
 
     // add matchday header marker
@@ -114,34 +117,35 @@ function renderFixtures() {
 
   let grouped = {};
 
-  // 1. Group fixtures by matchday
   fixtures.forEach(f => {
-    if (f.header) return;
-
-    if (!grouped[f.matchday]) {
-      grouped[f.matchday] = [];
-    }
-
+    if (!grouped[f.matchday]) grouped[f.matchday] = [];
     grouped[f.matchday].push(f);
   });
 
-  // 2. Render clean structure
   let html = "";
 
   Object.keys(grouped).forEach(day => {
 
     html += `
-      <div style="
-        margin-top:20px;
-        padding:10px;
-        background:#222;
-        border-left:4px solid #00ff88;
-      ">
+      <div style="margin-top:20px; padding:10px; background:#222; border-left:4px solid #00ff88;">
         <h2>Matchday ${day}</h2>
     `;
 
     grouped[day].forEach(match => {
-      html += `<div>${match.home} vs ${match.away}</div>`;
+
+      html += `
+        <div style="margin:8px 0;">
+          ${match.home}
+
+          <input type="number" id="hg-${match.id}" style="width:50px;">
+
+          -
+
+          <input type="number" id="ag-${match.id}" style="width:50px;">
+
+          ${match.away}
+        </div>
+      `;
     });
 
     html += `</div>`;
@@ -168,9 +172,8 @@ function calculateTable() {
 
   fixtures.forEach((f, i) => {
 
-    let hg = parseInt(document.getElementById("hg" + i).value) || 0;
-    let ag = parseInt(document.getElementById("ag" + i).value) || 0;
-
+    let hg = parseInt(document.getElementById("hg-" + f.id)?.value) || 0;
+let ag = parseInt(document.getElementById("ag-" + f.id)?.value) || 0;
     let home = table[f.home];
     let away = table[f.away];
 
