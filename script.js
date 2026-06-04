@@ -46,48 +46,47 @@ let fixtures = [];
 function generateDraw() {
   fixtures = [];
 
-  let pot1 = shuffleArray(teams.filter(t => t.pot === 1));
-  let pot2 = shuffleArray(teams.filter(t => t.pot === 2));
-  let pot3 = shuffleArray(teams.filter(t => t.pot === 3));
-  let pot4 = shuffleArray(teams.filter(t => t.pot === 4));
-
-  let allPots = [pot1, pot2, pot3, pot4];
+  let pools = {
+    1: shuffleArray(teams.filter(t => t.pot === 1)),
+    2: shuffleArray(teams.filter(t => t.pot === 2)),
+    3: shuffleArray(teams.filter(t => t.pot === 3)),
+    4: shuffleArray(teams.filter(t => t.pot === 4))
+  };
 
   let matchCount = {};
+  teams.forEach(t => matchCount[t.name] = 0);
 
-  teams.forEach(t => {
-    matchCount[t.name] = 0;
-  });
+  function getAvailableOpponent(team, potList) {
+    return potList.find(opponent => {
+      return opponent.name !== team.name &&
+             matchCount[opponent.name] < 8 &&
+             matchCount[team.name] < 8;
+    });
+  }
 
-  // each team must play 8 matches total
-  for (let p = 0; p < 4; p++) {
+  for (let round = 0; round < 12; round++) {
 
-    for (let i = 0; i < teams.length / 4; i++) {
+    for (let p = 1; p <= 4; p++) {
 
-      let home = allPots[p][i];
+      let team = pools[p][round % pools[p].length];
+      if (!team) continue;
 
-      if (!home) continue;
+      for (let q = p + 1; q <= 4; q++) {
 
-      for (let q = p + 1; q < 4; q++) {
+        let opponent = getAvailableOpponent(team, pools[q]);
+        if (!opponent) continue;
 
-        let away = allPots[q][i];
-
-        if (!away) continue;
-
-        if (matchCount[home.name] >= 8) continue;
-        if (matchCount[away.name] >= 8) continue;
-
-        if (home.name === away.name) continue;
+        if (matchCount[team.name] >= 8 || matchCount[opponent.name] >= 8) continue;
 
         fixtures.push({
-          home: home.name,
-          away: away.name,
+          home: team.name,
+          away: opponent.name,
           hg: "",
           ag: ""
         });
 
-        matchCount[home.name]++;
-        matchCount[away.name]++;
+        matchCount[team.name]++;
+        matchCount[opponent.name]++;
       }
     }
   }
