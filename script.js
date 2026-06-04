@@ -46,17 +46,49 @@ let fixtures = [];
 function generateDraw() {
   fixtures = [];
 
-  let shuffled = [...teams];
-  shuffle(shuffled);
+  let pot1 = shuffleArray(teams.filter(t => t.pot === 1));
+  let pot2 = shuffleArray(teams.filter(t => t.pot === 2));
+  let pot3 = shuffleArray(teams.filter(t => t.pot === 3));
+  let pot4 = shuffleArray(teams.filter(t => t.pot === 4));
 
-  for (let i = 0; i < shuffled.length; i += 2) {
-    if (shuffled[i + 1]) {
-      fixtures.push({
-        home: shuffled[i].name,
-        away: shuffled[i + 1].name,
-        hg: "",
-        ag: ""
-      });
+  let allPots = [pot1, pot2, pot3, pot4];
+
+  let matchCount = {};
+
+  teams.forEach(t => {
+    matchCount[t.name] = 0;
+  });
+
+  // each team must play 8 matches total
+  for (let p = 0; p < 4; p++) {
+
+    for (let i = 0; i < teams.length / 4; i++) {
+
+      let home = allPots[p][i];
+
+      if (!home) continue;
+
+      for (let q = p + 1; q < 4; q++) {
+
+        let away = allPots[q][i];
+
+        if (!away) continue;
+
+        if (matchCount[home.name] >= 8) continue;
+        if (matchCount[away.name] >= 8) continue;
+
+        if (home.name === away.name) continue;
+
+        fixtures.push({
+          home: home.name,
+          away: away.name,
+          hg: "",
+          ag: ""
+        });
+
+        matchCount[home.name]++;
+        matchCount[away.name]++;
+      }
     }
   }
 
@@ -161,3 +193,13 @@ function shuffle(array) {
     [array[i], array[j]] = [array[j], array[i]];
   }
                    }
+
+function shuffleArray(arr) {
+  let copy = [...arr];
+  for (let i = copy.length - 1; i > 0; i--) {
+    let j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+              }
+
