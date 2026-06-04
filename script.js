@@ -116,9 +116,23 @@ function renderFixtures() {
   fixtures.forEach(f => {
 
     if (f.header) {
-      html += `<h2>Matchday ${f.matchday}</h2>`;
-    } else {
-      html += `<p>${f.home} vs ${f.away}</p>`;
+      html += `
+        <div style="
+          margin-top:20px;
+          padding:10px;
+          background:#222;
+          border-left:4px solid #00ff88;
+        ">
+          <h2>Matchday ${f.matchday}</h2>
+        </div>
+      `;
+    } 
+    else {
+      html += `
+        <div style="padding:5px 10px;">
+          ${f.home} vs ${f.away}
+        </div>
+      `;
     }
 
   });
