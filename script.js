@@ -46,48 +46,61 @@ let fixtures = [];
 function generateDraw() {
   fixtures = [];
 
+  let matchdays = 8;
+
   let teamsCopy = teams.map(t => ({
     name: t.name,
     pot: t.pot,
-    matches: []
+    played: [],
+    matchesLeft: 8
   }));
 
-  function canPlay(a, b) {
+  function canPair(a, b, day) {
     if (a.name === b.name) return false;
-
-    if (a.matches.includes(b.name)) return false;
-
+    if (a.played.includes(b.name)) return false;
+    if (a.matchesLeft <= 0 || b.matchesLeft <= 0) return false;
     return true;
   }
 
-  function addMatch(a, b) {
-    if (a.matches.length >= 8 || b.matches.length >= 8) return false;
+  for (let day = 1; day <= matchdays; day++) {
 
-    a.matches.push(b.name);
-    b.matches.push(a.name);
+    let usedThisDay = new Set();
 
-    fixtures.push({
-      home: a.name,
-      away: b.name,
-      hg: "",
-      ag: ""
-    });
+    for (let i = 0; i < teamsCopy.length; i++) {
 
-    return true;
-  }
+      let teamA = teamsCopy[i];
 
-  let attempts = 0;
+      if (usedThisDay.has(teamA.name)) continue;
 
-  while (attempts < 5000) {
+      for (let j = i + 1; j < teamsCopy.length; j++) {
 
-    let a = teamsCopy[Math.floor(Math.random() * teamsCopy.length)];
-    let b = teamsCopy[Math.floor(Math.random() * teamsCopy.length)];
+        let teamB = teamsCopy[j];
 
-    if (canPlay(a, b)) {
-      addMatch(a, b);
+        if (usedThisDay.has(teamB.name)) continue;
+
+        if (canPair(teamA, teamB, day)) {
+
+          fixtures.push({
+            matchday: day,
+            home: teamA.name,
+            away: teamB.name,
+            hg: "",
+            ag: ""
+          });
+
+          teamA.played.push(teamB.name);
+          teamB.played.push(teamA.name);
+
+          teamA.matchesLeft--;
+          teamB.matchesLeft--;
+
+          usedThisDay.add(teamA.name);
+          usedThisDay.add(teamB.name);
+
+          break;
+        }
+      }
     }
-
-    attempts++;
   }
 
   renderFixtures();
