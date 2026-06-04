@@ -1,20 +1,28 @@
-<!DOCTYPE html><html>
+<!DOCTYPE html>
+<html>
 <head>
-    <title>UCL Simulator</title>
-    <link rel="stylesheet" href="style.css">
+  <title>UCL Simulator</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
 <h1>UCL Simulator</h1>
 
 <button onclick="generateDraw()">Generate League Phase Draw</button>
+<button onclick="renderTeams()">Show Teams</button>
 
-<button onclick="renderTeams()">Reload Teams</button>
-
-<div id="teamList"></div>
-
+<h2>Fixtures</h2>
 <div id="fixtures"></div>
+
+<h2>Enter Results</h2>
+<div id="resultsBox"></div>
+
+<button onclick="calculateTable()">Update Standings</button>
+
+<h2>Standings</h2>
+<div id="standings"></div>
 
 <script src="script.js"></script>
 
 </body>
+</html>
