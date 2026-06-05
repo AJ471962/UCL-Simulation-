@@ -51,6 +51,9 @@ let knockout = null;
 let knockoutStage = null;
 let currentRound = "none";
 let playoffWinners = [];
+let savedKnockout = {};
+// format:
+// { roundName: { matchId: {h, a} } }
 
 /* ---------------- HELPERS ---------------- */
 
@@ -517,24 +520,36 @@ function createPairs(list) {
 }
 
 function advanceKnockout() {
-  if (currentRound === "playoffs") {
-    playPlayoffs();
-    return;
-  }
-
-  const round = knockoutStage[currentRound];
+  const round =
+    currentRound === "playoffs"
+      ? knockoutStage.playoffs
+      : knockoutStage[currentRound];
 
   const winners = round.map(m => {
-    const h = Math.floor(Math.random() * 4);
-    const a = Math.floor(Math.random() * 4);
+
+    const saved = savedKnockout[currentRound]?.[m.id];
+
+    let h, a;
+
+    if (saved) {
+      h = saved.h;
+      a = saved.a;
+    } else {
+      h = Math.floor(Math.random() * 4);
+      a = Math.floor(Math.random() * 4);
+    }
 
     m.score = `${h}-${a}`;
-    m.winner = h >= a ? m.home : m.away;
 
-    return m.winner;
+    return h >= a ? m.home : m.away;
   });
 
-  if (currentRound === "roundOf16") {
+  if (currentRound === "playoffs") {
+    knockoutStage.roundOf16 = createPairs(winners);
+    currentRound = "roundOf16";
+  }
+
+  else if (currentRound === "roundOf16") {
     knockoutStage.quarterFinal = createPairs(winners);
     currentRound = "quarterFinal";
   }
@@ -550,7 +565,7 @@ function advanceKnockout() {
   }
 
   else if (currentRound === "final") {
-    alert("🏆 Champion: " + winners[0]);
+    alert("Champion: " + winners[0]);
   }
 
   renderKnockout();
@@ -558,32 +573,71 @@ function advanceKnockout() {
 
 function renderKnockout() {
   const box = document.getElementById("fixtures");
-
   if (!knockoutStage) return;
 
-  let roundData =
-    currentRound === "playoffs" ? knockoutStage.playoffs :
-    knockoutStage[currentRound];
+  const round =
+    currentRound === "playoffs"
+      ? knockoutStage.playoffs
+      : knockoutStage[currentRound];
 
   let html = `
-    <h2>Knockout Stage - ${currentRound}</h2>
+    <h2>Knockout - ${currentRound}</h2>
+
     <button onclick="advanceKnockout()">Play Round</button>
+    <button onclick="resetKnockoutRound()">Reset Round</button>
+    <button onclick="calculateKnockoutTable()">Check Winners</button>
   `;
 
-  roundData.forEach(m => {
-    if (currentRound === "playoffs") {
-      html += `<div>${m.home} vs ${m.away}</div>`;
-    } else {
-      html += `
-        <div>
-          ${m.home} vs ${m.away}
-          ${m.score ? " → " + m.score : ""}
-        </div>
-      `;
-    }
+  round.forEach((m, i) => {
+
+    const saved = savedKnockout[currentRound]?.[m.id];
+
+    const hVal = saved ? saved.h : "";
+    const aVal = saved ? saved.a : "";
+
+    html += `
+      <div style="margin:10px 0;">
+        ${m.home} 
+        <input id="kh-${m.id}" type="number" value="${hVal}" style="width:50px;">
+        -
+        <input id="ka-${m.id}" type="number" value="${aVal}" style="width:50px;">
+        ${m.away}
+      </div>
+    `;
   });
 
   box.innerHTML = html;
+}
+
+function saveKnockoutRound() {
+  const round =
+    currentRound === "playoffs"
+      ? knockoutStage.playoffs
+      : knockoutStage[currentRound];
+
+  if (!savedKnockout[currentRound]) {
+    savedKnockout[currentRound] = {};
+  }
+
+  round.forEach(m => {
+    const h = document.getElementById(`kh-${m.id}`);
+    const a = document.getElementById(`ka-${m.id}`);
+
+    if (!h || !a) return;
+    if (h.value === "" || a.value === "") return;
+
+    savedKnockout[currentRound][m.id] = {
+      h: Number(h.value),
+      a: Number(a.value)
+    };
+  });
+
+  alert("Knockout saved");
+}
+
+function resetKnockoutRound() {
+  delete savedKnockout[currentRound];
+  renderKnockout();
 }
 
 function showLeaguePhase() {
@@ -607,4 +661,7 @@ window.resetMatchday = resetMatchday;
 window.showLeaguePhase = showLeaguePhase;
 window.showKnockout = showKnockout;
 window.generateKnockout = generateKnockout;
+window.advanceKnockout = advanceKnockout;
+window.saveKnockoutRound = saveKnockoutRound;
+window.resetKnockoutRound = resetKnockoutRound;
 window.advanceKnockout = advanceKnockout;
