@@ -65,7 +65,7 @@ function shuffleArray(arr) {
   return copy;
 }
 
-/* ---------------- REALISTIC RESULT SIM ---------------- */
+/* ---------------- REALISTIC SIM ---------------- */
 
 function simulateMatch(home, away) {
   const hPot = getPot(home);
@@ -81,7 +81,40 @@ function simulateMatch(home, away) {
   return "D";
 }
 
-/* ---------------- DRAW (FIXED) ---------------- */
+/* ---------------- AUTO FILL (FIX FOR BUTTON) ---------------- */
+
+function autoFillResults() {
+  if (!fixtures.length) {
+    alert("No fixtures generated yet.");
+    return;
+  }
+
+  fixtures
+    .filter(f => f.matchday === currentMatchday)
+    .forEach(f => {
+      const result = simulateMatch(f.home, f.away);
+
+      let h = 0, a = 0;
+
+      if (result === "H") {
+        h = Math.floor(Math.random() * 4);
+        a = Math.floor(Math.random() * h);
+      } else if (result === "A") {
+        a = Math.floor(Math.random() * 4);
+        h = Math.floor(Math.random() * a);
+      } else {
+        h = a = Math.floor(Math.random() * 3);
+      }
+
+      const hg = document.getElementById(`hg-${f.id}`);
+      const ag = document.getElementById(`ag-${f.id}`);
+
+      if (hg) hg.value = h;
+      if (ag) ag.value = a;
+    });
+}
+
+/* ---------------- DRAW (SAFE VERSION) ---------------- */
 
 function generateDraw() {
   fixtures = [];
@@ -93,6 +126,7 @@ function generateDraw() {
     const season = [];
     let nextId = 0;
     let success = true;
+
     const usedPairs = new Set();
 
     for (let day = 1; day <= MATCHDAYS; day++) {
@@ -107,7 +141,7 @@ function generateDraw() {
           teams
             .map(t => t.name)
             .filter(op =>
-              op !== teamA &&
+              op !== teamA &&                     // HARD FIX 1
               !usedToday.has(op) &&
               !usedPairs.has(pairKey(teamA, op))
             )
@@ -116,7 +150,7 @@ function generateDraw() {
         let found = false;
 
         for (const teamB of opponents) {
-          if (teamA === teamB) continue; // HARD FIX
+          if (teamA === teamB) continue;       // HARD FIX 2
 
           if (usedToday.has(teamB)) continue;
 
@@ -139,8 +173,7 @@ function generateDraw() {
             away = teamB;
           }
 
-          // FINAL SAFETY CHECK (prevents Chelsea vs Chelsea bug)
-          if (home === away) continue;
+          if (home === away) continue; // FINAL SAFETY
 
           dayMatches.push({
             id: nextId++,
@@ -256,8 +289,8 @@ function calculateTable() {
     away.gf += a; away.ga += h;
   });
 
-  const sorted = Object.entries(table).sort((a, b) =>
-    b[1].pts - a[1].pts || (b[1].gf - b[1].ga) - (a[1].gf - a[1].ga)
+  const sorted = Object.entries(table).sort((a,b) =>
+    b[1].pts - a[1].pts || (b[1].gf-b[1].ga) - (a[1].gf-a[1].ga)
   );
 
   renderTable(sorted);
@@ -291,9 +324,10 @@ function renderTable(sorted) {
   box.innerHTML = html;
 }
 
-/* ---------------- GLOBAL FIX ---------------- */
-// ensures button always works
+/* ---------------- GLOBAL EXPORTS ---------------- */
+
 window.generateDraw = generateDraw;
 window.calculateTable = calculateTable;
 window.prevMatchday = prevMatchday;
 window.nextMatchday = nextMatchday;
+window.autoFillResults = autoFillResults;
