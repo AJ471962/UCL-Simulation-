@@ -81,37 +81,37 @@ function simulateMatch(home, away) {
   return "D";
 }
 
-/* ---------------- AUTO FILL (FIX FOR BUTTON) ---------------- */
+/* ---------------- AUTO FILL FIX (GLOBAL SAFE) ---------------- */
 
 function autoFillResults() {
-  if (!fixtures.length) {
+  if (!fixtures || fixtures.length === 0) {
     alert("No fixtures generated yet.");
     return;
   }
 
-  fixtures
-    .filter(f => f.matchday === currentMatchday)
-    .forEach(f => {
-      const result = simulateMatch(f.home, f.away);
+  const dayFixtures = fixtures.filter(f => f.matchday === currentMatchday);
 
-      let h = 0, a = 0;
+  dayFixtures.forEach(f => {
+    const result = simulateMatch(f.home, f.away);
 
-      if (result === "H") {
-        h = Math.floor(Math.random() * 4);
-        a = Math.floor(Math.random() * h);
-      } else if (result === "A") {
-        a = Math.floor(Math.random() * 4);
-        h = Math.floor(Math.random() * a);
-      } else {
-        h = a = Math.floor(Math.random() * 3);
-      }
+    let h = 0, a = 0;
 
-      const hg = document.getElementById(`hg-${f.id}`);
-      const ag = document.getElementById(`ag-${f.id}`);
+    if (result === "H") {
+      h = Math.floor(Math.random() * 4) + 1;
+      a = Math.floor(Math.random() * h);
+    } else if (result === "A") {
+      a = Math.floor(Math.random() * 4) + 1;
+      h = Math.floor(Math.random() * a);
+    } else {
+      h = a = Math.floor(Math.random() * 3);
+    }
 
-      if (hg) hg.value = h;
-      if (ag) ag.value = a;
-    });
+    const hg = document.getElementById(`hg-${f.id}`);
+    const ag = document.getElementById(`ag-${f.id}`);
+
+    if (hg) hg.value = h;
+    if (ag) ag.value = a;
+  });
 }
 
 /* ---------------- DRAW (SAFE VERSION) ---------------- */
@@ -141,7 +141,7 @@ function generateDraw() {
           teams
             .map(t => t.name)
             .filter(op =>
-              op !== teamA &&                     // HARD FIX 1
+              op !== teamA &&
               !usedToday.has(op) &&
               !usedPairs.has(pairKey(teamA, op))
             )
@@ -150,7 +150,6 @@ function generateDraw() {
         let found = false;
 
         for (const teamB of opponents) {
-          if (teamA === teamB) continue;       // HARD FIX 2
 
           if (usedToday.has(teamB)) continue;
 
@@ -160,20 +159,15 @@ function generateDraw() {
 
           const result = simulateMatch(teamA, teamB);
 
-          let home, away;
+          let home = teamA;
+          let away = teamB;
 
-          if (result === "H") {
-            home = teamA;
-            away = teamB;
-          } else if (result === "A") {
+          if (result === "A") {
             home = teamB;
             away = teamA;
-          } else {
-            home = teamA;
-            away = teamB;
           }
 
-          if (home === away) continue; // FINAL SAFETY
+          if (home === away) continue;
 
           dayMatches.push({
             id: nextId++,
@@ -324,10 +318,10 @@ function renderTable(sorted) {
   box.innerHTML = html;
 }
 
-/* ---------------- GLOBAL EXPORTS ---------------- */
-
+/* ---------------- FIX FOR YOUR ERROR ---------------- */
+// ensures browser always sees the function
+window.autoFillResults = autoFillResults;
 window.generateDraw = generateDraw;
 window.calculateTable = calculateTable;
 window.prevMatchday = prevMatchday;
 window.nextMatchday = nextMatchday;
-window.autoFillResults = autoFillResults;
