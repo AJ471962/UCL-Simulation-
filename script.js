@@ -125,7 +125,6 @@ function buildNeighborGraph() {
     graph[b].add(a);
   }
 
-  // Same-pot cycle: each team gets 2 same-pot fixtures
   POT_NUMBERS.forEach(pot => {
     const arr = pots[pot];
     for (let i = 0; i < arr.length; i++) {
@@ -133,7 +132,6 @@ function buildNeighborGraph() {
     }
   });
 
-  // Cross-pot edges: each team gets 2 fixtures against each other pot
   for (let i = 0; i < POT_NUMBERS.length; i++) {
     for (let j = i + 1; j < POT_NUMBERS.length; j++) {
       const potA = pots[POT_NUMBERS[i]];
@@ -366,12 +364,22 @@ function calculateTable() {
 // SHOW TABLE
 function renderTable(sorted) {
   let html = "<table border='1' style='width:100%; border-collapse:collapse;'>";
-  html += "<tr><th>Team</th><th>Pts</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>GD</th></tr>";
+  html += "<tr><th>#</th><th>Team</th><th>Pts</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>GD</th></tr>";
 
-  sorted.forEach(([name, stats]) => {
+  sorted.forEach(([name, stats], index) => {
+    const position = index + 1;
     const gd = stats.gf - stats.ga;
+
+    let rowStyle = "";
+    if (position <= 8) {
+      rowStyle = "background:#1f8f3a;color:white;";
+    } else if (position <= 24) {
+      rowStyle = "background:#b8860b;color:white;";
+    }
+
     html += `
-      <tr>
+      <tr style="${rowStyle}">
+        <td>${position}</td>
         <td>${name}</td>
         <td>${stats.pts}</td>
         <td>${stats.w}</td>
