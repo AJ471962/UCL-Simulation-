@@ -73,12 +73,13 @@ function generateDraw() {
       if (usedThisDay.has(teamA.name)) continue;
 
       let opponent = pool.find(op =>
-        op.name !== teamA.name &&
-        !teamA.opponents.includes(op.name) &&
-        !usedThisDay.has(op.name) &&
-        teamA.playedCount < 8 &&
-        op.playedCount < 8
-      );
+  op.name !== teamA.name &&
+  getPot(op.name) !== getPot(teamA.name) && // 🔥 KEY FIX
+  !teamA.opponents.includes(op.name) &&
+  !usedThisDay.has(op.name) &&
+  teamA.playedCount < 8 &&
+  op.playedCount < 8
+);
 
       if (!opponent) continue;
 
