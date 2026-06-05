@@ -1,4 +1,4 @@
-let teams = [
+const DEFAULT_TEAMS = [
   { name: "Real Madrid", pot: 1 },
   { name: "Manchester City", pot: 1 },
   { name: "Paris Saint-Germain", pot: 1 },
@@ -40,126 +40,275 @@ let teams = [
   { name: "Braga", pot: 4 }
 ];
 
+const MATCHDAYS = 8;
+const POT_NUMBERS = [1, 2, 3, 4];
+
+let teams = loadTeams();
 let fixtures = [];
 
-function getPot(teamName) {
-  return teams.find(t => t.name === teamName)?.pot;
+function loadTeams() {
+  try {
+    const saved = JSON.parse(localStorage.getItem("ucl_teams"));
+    if (Array.isArray(saved) && saved.length === 36) {
+      return saved;
+    }
+  } catch (e) {
+    // ignore and fall back to defaults
+  }
+  return cloneDefaultTeams();
 }
 
-function getTeamsByPot(potNumber) {
-  return teams.map(t => t.name).filter(name => getPot(name) === potNumber);
+function cloneDefaultTeams() {
+  return DEFAULT_TEAMS.map(t => ({ name: t.name, pot: t.pot }));
+}
+
+function saveTeams() {
+  localStorage.setItem("ucl_teams", JSON.stringify(teams));
+}
+
+function getPot(teamName) {
+  const team = teams.find(t => t.name === teamName);
+  return team ? Number(team.pot) : null;
+}
+
+function pairKey(a, b) {
+  return a < b ? `${a}__${b}` : `${b}__${a}`;
+}
+
+function shuffleArray(arr) {
+  const copy = [...arr];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
+
+function countTeamsInPot(pot) {
+  return teams.filter(t => Number(t.pot) === pot).length;
+}
+
+function validatePotSetup() {
+  return POT_NUMBERS.every(pot => countTeamsInPot(pot) === 9) && teams.length === 36;
+}
+
+function createSeasonState() {
+  const remaining = {};
+  teams.forEach(t => {
+    remaining[t.name] = {
+      1: 2,
+      2: 2,
+      3: 2,
+      4: 2
+    };
+  });
+
+  return {
+    remaining,
+    playedPairs: new Set()
+  };
+}
+
+function totalRemainingForTeam(state, teamName) {
+  const r = state.remaining[teamName];
+  return r[1] + r[2] + r[3] + r[4];
+}
+
+function candidateOpponents(teamName, usedToday, state) {
+  const teamPot = getPot(teamName);
+
+  return shuffleArray(
+    teams
+      .map(t => t.name)
+      .filter(opponentName => {
+        if (opponentName === teamName) return false;
+        if (usedToday.has(opponentName)) return false;
+        if (state.playedPairs.has(pairKey(teamName, opponentName))) return false;
+
+        const opponentPot = getPot(opponentName);
+        if (!opponentPot) return false;
+
+        return (
+          state.remaining[teamName][opponentPot] > 0 &&
+          state.remaining[opponentName][teamPot] > 0 &&
+          totalRemainingForTeam(state, opponentName) > 0
+        );
+      })
+  );
+}
+
+function chooseNextTeam(usedToday, state) {
+  let bestTeam = null;
+  let bestCount = Infinity;
+
+  const teamNames = shuffleArray(teams.map(t => t.name));
+
+  for (const teamName of teamNames) {
+    if (usedToday.has(teamName)) continue;
+    if (totalRemainingForTeam(state, teamName) <= 0) continue;
+
+    const candidates = candidateOpponents(teamName, usedToday, state);
+
+    if (candidates.length < bestCount) {
+      bestCount = candidates.length;
+      bestTeam = teamName;
+    }
+
+    if (bestCount === 0) {
+      return bestTeam;
+    }
+  }
+
+  return bestTeam;
+}
+
+function buildMatchday(day, state) {
+  const usedToday = new Set();
+  const pairs = [];
+
+  function recurse() {
+    if (usedToday.size === teams.length) return true;
+
+    const teamA = chooseNextTeam(usedToday, state);
+    if (!teamA) return false;
+
+    const opponents = candidateOpponents(teamA, usedToday, state);
+    if (opponents.length === 0) return false;
+
+    for (const teamB of opponents) {
+      const potA = getPot(teamA);
+      const potB = getPot(teamB);
+      const key = pairKey(teamA, teamB);
+
+      usedToday.add(teamA);
+      usedToday.add(teamB);
+      state.playedPairs.add(key);
+
+      state.remaining[teamA][potB]--;
+      state.remaining[teamB][potA]--;
+
+      pairs.push({
+        home: teamA,
+        away: teamB
+      });
+
+      if (recurse()) return true;
+
+      pairs.pop();
+      state.remaining[teamA][potB]++;
+      state.remaining[teamB][potA]++;
+      state.playedPairs.delete(key);
+      usedToday.delete(teamA);
+      usedToday.delete(teamB);
+    }
+
+    return false;
+  }
+
+  return recurse() ? pairs : null;
 }
 
 // DRAW
 function generateDraw() {
   fixtures = [];
 
-  let matchId = 0;
+  const standingsBox = document.getElementById("standings");
+  if (standingsBox) standingsBox.innerHTML = "";
 
-  let remainingOpponents = {};
-  let matchdays = 8;
-
-  teams.forEach(t => {
-    remainingOpponents[t.name] = teams
-      .filter(x => x.name !== t.name)
-      .map(x => x.name);
-  });
-
-  function canPlay(a, b, dayMap) {
-    return (
-      !dayMap.has(a) &&
-      !dayMap.has(b) &&
-      remainingOpponents[a].includes(b)
-    );
+  if (!validatePotSetup()) {
+    alert("Each pot must contain exactly 9 teams, and there must be 36 teams total.");
+    return;
   }
 
-  for (let day = 1; day <= matchdays; day++) {
+  const maxAttempts = 200;
 
-    let usedToday = new Set();
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const state = createSeasonState();
+    const seasonFixtures = [];
+    let success = true;
+    let nextId = 0;
 
-    let shuffledTeams = shuffleArray(teams.map(t => t.name));
+    for (let day = 1; day <= MATCHDAYS; day++) {
+      const dayPairs = buildMatchday(day, state);
 
-    for (let team of shuffledTeams) {
+      if (!dayPairs || dayPairs.length !== 18) {
+        success = false;
+        break;
+      }
 
-      if (usedToday.has(team)) continue;
-
-      let opponent = remainingOpponents[team]
-        .find(op => !usedToday.has(op));
-
-      if (!opponent) continue;
-
-      // remove both ways
-      remainingOpponents[team] =
-        remainingOpponents[team].filter(x => x !== opponent);
-
-      remainingOpponents[opponent] =
-        remainingOpponents[opponent].filter(x => x !== team);
-
-      fixtures.push({
-        id: matchId++,
-        matchday: day,
-        home: team,
-        away: opponent
+      dayPairs.forEach(pair => {
+        seasonFixtures.push({
+          id: nextId++,
+          matchday: day,
+          home: pair.home,
+          away: pair.away
+        });
       });
+    }
 
-      usedToday.add(team);
-      usedToday.add(opponent);
+    const allUsed = teams.every(t => totalRemainingForTeam(state, t.name) === 0);
+
+    if (success && allUsed && seasonFixtures.length === 144) {
+      fixtures = seasonFixtures;
+      renderFixtures();
+      return;
     }
   }
 
-  renderFixtures();
+  alert("Could not generate a valid draw. Try again.");
 }
-  
 
 // SHOW FIXTURES + INPUT BOXES
 function renderFixtures() {
+  const fixturesBox = document.getElementById("fixtures");
+  if (!fixturesBox) return;
 
-  let grouped = {};
-
-  fixtures.forEach(f => {
+  const grouped = {};
+  for (const f of fixtures) {
     if (!grouped[f.matchday]) grouped[f.matchday] = [];
     grouped[f.matchday].push(f);
-  });
+  }
 
   let html = "";
 
-  Object.keys(grouped).forEach(day => {
+  for (let day = 1; day <= MATCHDAYS; day++) {
+    const dayFixtures = grouped[day] || [];
+    if (dayFixtures.length === 0) continue;
 
     html += `
-      <div style="margin-top:20px; padding:10px; background:#222; border-left:4px solid #00ff88;">
-        <h2>Matchday ${day}</h2>
+      <div style="margin-top:20px; padding:12px; background:#222; border-left:4px solid #00ff88; border-radius:10px;">
+        <h2 style="margin-top:0;">Matchday ${day}</h2>
     `;
 
-    grouped[day].forEach(f => {
-
-      if (!f || !f.home || !f.away) return;
-
+    dayFixtures.forEach(f => {
       html += `
-        <div style="margin:8px 0;">
-          ${f.home}
-
-          <input type="number" id="hg-${f.id}" style="width:50px;">
-
-          -
-
-          <input type="number" id="ag-${f.id}" style="width:50px;">
-
-          ${f.away}
+        <div style="margin:8px 0; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+          <span style="min-width:160px;">${f.home}</span>
+          <input type="number" id="hg-${f.id}" style="width:60px;">
+          <span>-</span>
+          <input type="number" id="ag-${f.id}" style="width:60px;">
+          <span style="min-width:160px;">${f.away}</span>
         </div>
       `;
     });
 
     html += `</div>`;
-  });
+  }
 
-  document.getElementById("fixtures").innerHTML = html;
+  fixturesBox.innerHTML = html;
 }
-
 
 // TABLE ENGINE
 function calculateTable() {
+  const standingsBox = document.getElementById("standings");
+  if (!standingsBox) return;
 
-  let table = {};
+  if (fixtures.length === 0) {
+    standingsBox.innerHTML = "<p>No fixtures yet. Generate the draw first.</p>";
+    return;
+  }
+
+  const table = {};
 
   teams.forEach(t => {
     table[t.name] = {
@@ -172,39 +321,50 @@ function calculateTable() {
     };
   });
 
-  fixtures.forEach((f, i) => {
+  fixtures.forEach(f => {
+    if (!f || !f.home || !f.away) return;
 
-    let hgInput = document.getElementById("hg-" + f.id);
-let agInput = document.getElementById("ag-" + f.id);
+    const hgInput = document.getElementById(`hg-${f.id}`);
+    const agInput = document.getElementById(`ag-${f.id}`);
 
-if (!hgInput || !agInput) return;
+    if (!hgInput || !agInput) return;
 
-let hg = parseInt(hgInput.value) || 0;
-let ag = parseInt(agInput.value) || 0;
-    let home = table[f.home];
-    let away = table[f.away];
+    const hg = Number.parseInt(hgInput.value, 10);
+    const ag = Number.parseInt(agInput.value, 10);
 
-    home.gf += hg;
-    home.ga += ag;
+    const homeGoals = Number.isFinite(hg) ? hg : 0;
+    const awayGoals = Number.isFinite(ag) ? ag : 0;
 
-    away.gf += ag;
-    away.ga += hg;
+    const home = table[f.home];
+    const away = table[f.away];
 
-    if (hg > ag) {
-      home.w++; home.pts += 3;
+    if (!home || !away) return;
+
+    home.gf += homeGoals;
+    home.ga += awayGoals;
+    away.gf += awayGoals;
+    away.ga += homeGoals;
+
+    if (homeGoals > awayGoals) {
+      home.w++;
+      home.pts += 3;
       away.l++;
-    } else if (ag > hg) {
-      away.w++; away.pts += 3;
+    } else if (awayGoals > homeGoals) {
+      away.w++;
+      away.pts += 3;
       home.l++;
     } else {
-      home.d++; away.d++;
+      home.d++;
+      away.d++;
       home.pts += 1;
       away.pts += 1;
     }
   });
 
-  let sorted = Object.entries(table).sort((a, b) => {
-    return b[1].pts - a[1].pts || (b[1].gf - b[1].ga) - (a[1].gf - a[1].ga);
+  const sorted = Object.entries(table).sort((a, b) => {
+    const aGD = a[1].gf - a[1].ga;
+    const bGD = b[1].gf - b[1].ga;
+    return b[1].pts - a[1].pts || bGD - aGD || b[1].gf - a[1].gf;
   });
 
   renderTable(sorted);
@@ -212,41 +372,96 @@ let ag = parseInt(agInput.value) || 0;
 
 // SHOW TABLE
 function renderTable(sorted) {
-  let html = "<table border='1' style='width:100%'><tr><th>Team</th><th>Pts</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th></tr>";
+  let html = "<table border='1' style='width:100%; border-collapse:collapse;'>";
+  html += "<tr><th>Team</th><th>Pts</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>GD</th></tr>";
 
-  sorted.forEach(t => {
+  sorted.forEach(([name, stats]) => {
+    const gd = stats.gf - stats.ga;
     html += `
       <tr>
-        <td>${t[0]}</td>
-        <td>${t[1].pts}</td>
-        <td>${t[1].w}</td>
-        <td>${t[1].d}</td>
-        <td>${t[1].l}</td>
-        <td>${t[1].gf}</td>
-        <td>${t[1].ga}</td>
+        <td>${name}</td>
+        <td>${stats.pts}</td>
+        <td>${stats.w}</td>
+        <td>${stats.d}</td>
+        <td>${stats.l}</td>
+        <td>${stats.gf}</td>
+        <td>${stats.ga}</td>
+        <td>${gd}</td>
       </tr>
     `;
   });
 
   html += "</table>";
 
-  document.getElementById("standings").innerHTML = html;
+  const standingsBox = document.getElementById("standings");
+  if (standingsBox) standingsBox.innerHTML = html;
 }
 
-// shuffle helper
-function shuffle(array) {
-  for (let i = array.length - 1; i > 0; i--) {
-    let j = Math.floor(Math.random() * (i + 1));
-    [array[i], array[j]] = [array[j], array[i]];
-  }
-                   }
+// POT EDITOR (optional)
+function renderTeamEditor() {
+  const editor = document.getElementById("teamEditor");
+  if (!editor) return;
 
-function shuffleArray(arr) {
-  let copy = [...arr];
-  for (let i = copy.length - 1; i > 0; i--) {
-    let j = Math.floor(Math.random() * (i + 1));
-    [copy[i], copy[j]] = [copy[j], copy[i]];
-  }
-  return copy;
-              }
+  let html = `
+    <div style="margin:16px 0; padding:12px; background:#1b1b1b; border-radius:10px;">
+      <h2>Edit Pots</h2>
+      <button onclick="savePots()" style="margin-right:8px;">Save Pots</button>
+      <button onclick="restoreDefaultTeams()">Restore Default Pots</button>
+      <div style="display:grid; gap:8px; margin-top:12px;">
+  `;
 
+  teams.forEach((team, index) => {
+    html += `
+      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+        <span style="min-width:180px;">${team.name}</span>
+        <select id="pot-${index}">
+          <option value="1" ${Number(team.pot) === 1 ? "selected" : ""}>Pot 1</option>
+          <option value="2" ${Number(team.pot) === 2 ? "selected" : ""}>Pot 2</option>
+          <option value="3" ${Number(team.pot) === 3 ? "selected" : ""}>Pot 3</option>
+          <option value="4" ${Number(team.pot) === 4 ? "selected" : ""}>Pot 4</option>
+        </select>
+      </div>
+    `;
+  });
+
+  html += `
+      </div>
+    </div>
+  `;
+
+  editor.innerHTML = html;
+}
+
+function savePots() {
+  teams = teams.map((team, index) => {
+    const select = document.getElementById(`pot-${index}`);
+    const pot = select ? Number(select.value) : Number(team.pot);
+    return { name: team.name, pot };
+  });
+
+  saveTeams();
+  resetSeason(false);
+  renderTeamEditor();
+}
+
+function restoreDefaultTeams() {
+  teams = cloneDefaultTeams();
+  saveTeams();
+  resetSeason(false);
+  renderTeamEditor();
+}
+
+function resetSeason(keepEditor = true) {
+  fixtures = [];
+
+  const fixturesBox = document.getElementById("fixtures");
+  if (fixturesBox) fixturesBox.innerHTML = "";
+
+  const standingsBox = document.getElementById("standings");
+  if (standingsBox) standingsBox.innerHTML = "";
+
+  if (keepEditor) renderTeamEditor();
+}
+
+// Initial UI build
+renderTeamEditor();
