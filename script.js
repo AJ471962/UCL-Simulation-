@@ -208,54 +208,128 @@ function buildMatchday(day, state) {
   return recurse() ? pairs : null;
 }
 
+function pairKey(a, b) {
+  return a < b ? `${a}__${b}` : `${b}__${a}`;
+}
+
+function buildPotTargets() {
+  const targets = {};
+  teams.forEach(t => {
+    targets[t.name] = shuffleArray([1, 1, 2, 2, 3, 3, 4, 4]);
+  });
+  return targets;
+}
+
 // DRAW
 function generateDraw() {
   fixtures = [];
 
-  const standingsBox = document.getElementById("standings");
-  if (standingsBox) standingsBox.innerHTML = "";
-
-  if (!validatePotSetup()) {
-    alert("Each pot must contain exactly 9 teams, and there must be 36 teams total.");
-    return;
-  }
-
-  const maxAttempts = 200;
+  const maxAttempts = 100;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const state = createSeasonState();
-    const seasonFixtures = [];
-    let success = true;
+    const targets = buildPotTargets();
+    const pairHistory = new Set();
+    const season = [];
     let nextId = 0;
+    let success = true;
 
     for (let day = 1; day <= MATCHDAYS; day++) {
-      const dayPairs = buildMatchday(day, state);
+      const usedToday = new Set();
+      const dayMatches = [];
 
-      if (!dayPairs || dayPairs.length !== 18) {
+      function candidatesFor(teamName) {
+        const teamPot = getPot(teamName);
+
+        return shuffleArray(
+          teams
+            .map(t => t.name)
+            .filter(op => {
+              if (op === teamName) return false;
+              if (usedToday.has(op)) return false;
+              if (pairHistory.has(pairKey(teamName, op))) return false;
+              if (targets[teamName][day - 1] !== getPot(op)) return false;
+              if (targets[op][day - 1] !== teamPot) return false;
+              return true;
+            })
+        );
+      }
+
+      function chooseTeam() {
+        let chosen = null;
+        let chosenCandidates = null;
+
+        const shuffledTeams = shuffleArray(teams.map(t => t.name));
+
+        for (const teamName of shuffledTeams) {
+          if (usedToday.has(teamName)) continue;
+
+          const candidates = candidatesFor(teamName);
+
+          if (candidates.length === 0) {
+            return teamName;
+          }
+
+          if (!chosen || candidates.length < chosenCandidates.length) {
+            chosen = teamName;
+            chosenCandidates = candidates;
+            if (candidates.length === 1) break;
+          }
+        }
+
+        return chosen;
+      }
+
+      function fillDay() {
+        if (usedToday.size === teams.length) return true;
+
+        const teamA = chooseTeam();
+        if (!teamA) return false;
+
+        const candidates = candidatesFor(teamA);
+        if (candidates.length === 0) return false;
+
+        for (const teamB of candidates) {
+          const key = pairKey(teamA, teamB);
+
+          usedToday.add(teamA);
+          usedToday.add(teamB);
+          pairHistory.add(key);
+
+          dayMatches.push({
+            id: nextId++,
+            matchday: day,
+            home: teamA,
+            away: teamB
+          });
+
+          if (fillDay()) return true;
+
+          dayMatches.pop();
+          pairHistory.delete(key);
+          usedToday.delete(teamA);
+          usedToday.delete(teamB);
+          nextId--;
+        }
+
+        return false;
+      }
+
+      if (!fillDay()) {
         success = false;
         break;
       }
 
-      dayPairs.forEach(pair => {
-        seasonFixtures.push({
-          id: nextId++,
-          matchday: day,
-          home: pair.home,
-          away: pair.away
-        });
-      });
+      season.push(...dayMatches);
     }
 
-    const allUsed = teams.every(t => totalRemainingForTeam(state, t.name) === 0);
-
-    if (success && allUsed && seasonFixtures.length === 144) {
-      fixtures = seasonFixtures;
+    if (success && season.length === 144) {
+      fixtures = season;
       renderFixtures();
       return;
     }
   }
 
-  alert("Could not generate a valid draw. Try again.");
+  alert("Could not generate a balanced season. Tap Generate League Phase Draw again.");
 }
 
 // SHOW FIXTURES + INPUT BOXES
@@ -308,7 +382,7 @@ function calculateTable() {
     return;
   }
 
-  const table = {};
+  let table = {};
 
   teams.forEach(t => {
     table[t.name] = {
@@ -324,32 +398,33 @@ function calculateTable() {
   fixtures.forEach(f => {
     if (!f || !f.home || !f.away) return;
 
-    const hgInput = document.getElementById(`hg-${f.id}`);
-    const agInput = document.getElementById(`ag-${f.id}`);
+    let hgInput = document.getElementById(`hg-${f.id}`);
+    let agInput = document.getElementById(`ag-${f.id}`);
 
     if (!hgInput || !agInput) return;
+    if (hgInput.value.trim() === "" || agInput.value.trim() === "") return;
 
-    const hg = Number.parseInt(hgInput.value, 10);
-    const ag = Number.parseInt(agInput.value, 10);
+    let hg = parseInt(hgInput.value, 10);
+    let ag = parseInt(agInput.value, 10);
 
-    const homeGoals = Number.isFinite(hg) ? hg : 0;
-    const awayGoals = Number.isFinite(ag) ? ag : 0;
+    if (Number.isNaN(hg) || Number.isNaN(ag)) return;
 
-    const home = table[f.home];
-    const away = table[f.away];
+    let home = table[f.home];
+    let away = table[f.away];
 
     if (!home || !away) return;
 
-    home.gf += homeGoals;
-    home.ga += awayGoals;
-    away.gf += awayGoals;
-    away.ga += homeGoals;
+    home.gf += hg;
+    home.ga += ag;
 
-    if (homeGoals > awayGoals) {
+    away.gf += ag;
+    away.ga += hg;
+
+    if (hg > ag) {
       home.w++;
       home.pts += 3;
       away.l++;
-    } else if (awayGoals > homeGoals) {
+    } else if (ag > hg) {
       away.w++;
       away.pts += 3;
       home.l++;
