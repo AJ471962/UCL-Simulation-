@@ -56,59 +56,54 @@ function generateDraw() {
 
   let matchId = 0;
 
-  let pools = {
-    1: shuffleArray(getTeamsByPot(1)),
-    2: shuffleArray(getTeamsByPot(2)),
-    3: shuffleArray(getTeamsByPot(3)),
-    4: shuffleArray(getTeamsByPot(4))
-  };
+  let remainingOpponents = {};
+  let matchdays = 8;
 
-  let used = {};
-  teams.forEach(t => used[t.name] = []);
+  teams.forEach(t => {
+    remainingOpponents[t.name] = teams
+      .filter(x => x.name !== t.name)
+      .map(x => x.name);
+  });
 
-  function pickOpponent(teamName, pot) {
-
-    let candidates = pools[pot].filter(op =>
-      op !== teamName &&
-      !used[teamName].includes(op) &&
-      used[op].length < 8
+  function canPlay(a, b, dayMap) {
+    return (
+      !dayMap.has(a) &&
+      !dayMap.has(b) &&
+      remainingOpponents[a].includes(b)
     );
-
-    if (candidates.length === 0) return null;
-
-    return candidates[Math.floor(Math.random() * candidates.length)];
   }
 
-  for (let team of teams) {
+  for (let day = 1; day <= matchdays; day++) {
 
-    let teamName = team.name;
+    let usedToday = new Set();
 
-    let requiredPerPot = 2;
+    let shuffledTeams = shuffleArray(teams.map(t => t.name));
 
-    for (let p = 1; p <= 4; p++) {
+    for (let team of shuffledTeams) {
 
-      let count = 0;
+      if (usedToday.has(team)) continue;
 
-      while (count < requiredPerPot) {
+      let opponent = remainingOpponents[team]
+        .find(op => !usedToday.has(op));
 
-        let opponent = pickOpponent(teamName, p);
+      if (!opponent) continue;
 
-        if (!opponent) break;
+      // remove both ways
+      remainingOpponents[team] =
+        remainingOpponents[team].filter(x => x !== opponent);
 
-        if (used[teamName].length >= 8 || used[opponent].length >= 8) break;
+      remainingOpponents[opponent] =
+        remainingOpponents[opponent].filter(x => x !== team);
 
-        used[teamName].push(opponent);
-        used[opponent].push(teamName);
+      fixtures.push({
+        id: matchId++,
+        matchday: day,
+        home: team,
+        away: opponent
+      });
 
-        fixtures.push({
-          id: matchId++,
-          matchday: Math.ceil((used[teamName].length) / 4),
-          home: teamName,
-          away: opponent
-        });
-
-        count++;
-      }
+      usedToday.add(team);
+      usedToday.add(opponent);
     }
   }
 
