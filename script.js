@@ -1,7 +1,7 @@
 const DEFAULT_TEAMS = [
   { name: "Real Madrid", pot: 1 },
   { name: "Manchester City", pot: 1 },
-  { name: "Paris Saint-Germain", pot: 1 },
+  { name: "Paris PSG", pot: 1 },
   { name: "Bayern Munich", pot: 1 },
   { name: "Inter Milan", pot: 1 },
   { name: "Arsenal", pot: 1 },
@@ -43,24 +43,14 @@ const DEFAULT_TEAMS = [
 const MATCHDAYS = 8;
 const POT_NUMBERS = [1, 2, 3, 4];
 
-let teams = loadTeams();
+let teams = DEFAULT_TEAMS.map(t => ({ ...t }));
 let fixtures = [];
 let currentMatchday = 1;
 
-function loadTeams() {
-  try {
-    const saved = JSON.parse(localStorage.getItem("ucl_teams"));
-    if (Array.isArray(saved) && saved.length === 36) return saved;
-  } catch {}
-  return DEFAULT_TEAMS.map(t => ({ ...t }));
-}
+/* ---------------- helpers ---------------- */
 
-function saveTeams() {
-  localStorage.setItem("ucl_teams", JSON.stringify(teams));
-}
-
-function getPot(teamName) {
-  return teams.find(t => t.name === teamName)?.pot ?? null;
+function getPot(team) {
+  return teams.find(t => t.name === team)?.pot ?? 4;
 }
 
 function pairKey(a, b) {
@@ -76,21 +66,34 @@ function shuffleArray(arr) {
   return copy;
 }
 
-function validatePotSetup() {
-  return POT_NUMBERS.every(p => teams.filter(t => t.pot == p).length === 9);
+/* ---------------- MATCH RESULT ENGINE (NEW REALISM) ---------------- */
+
+function simulateMatch(home, away) {
+  const hPot = getPot(home);
+  const aPot = getPot(away);
+
+  // strength difference (lower pot = stronger)
+  const strengthDiff = (aPot - hPot);
+
+  // base randomness
+  let homeScore = Math.random();
+  let awayScore = Math.random();
+
+  // stronger team advantage
+  homeScore += strengthDiff * 0.15;
+
+  // convert to result
+  if (homeScore > awayScore + 0.15) return "H";
+  if (awayScore > homeScore + 0.15) return "A";
+  return "D";
 }
 
-/* ================= DRAW ================= */
+/* ---------------- DRAW ---------------- */
 
 function generateDraw() {
   fixtures = [];
 
-  if (!validatePotSetup()) {
-    alert("Each pot must have 9 teams.");
-    return;
-  }
-
-  const maxAttempts = 100;
+  const maxAttempts = 80;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
 
@@ -122,19 +125,32 @@ function generateDraw() {
         let found = false;
 
         for (const teamB of opponents) {
-          const key = pairKey(teamA, teamB);
-
           if (usedToday.has(teamB)) continue;
 
           usedToday.add(teamA);
           usedToday.add(teamB);
-          usedPairs.add(key);
+          usedPairs.add(pairKey(teamA, teamB));
+
+          const result = simulateMatch(teamA, teamB);
+
+          let home, away;
+
+          if (result === "H") {
+            home = teamA;
+            away = teamB;
+          } else if (result === "A") {
+            home = teamB;
+            away = teamA;
+          } else {
+            home = teamA;
+            away = teamB;
+          }
 
           dayMatches.push({
             id: nextId++,
             matchday: day,
-            home: Math.random() < 0.5 ? teamA : teamB,
-            away: Math.random() < 0.5 ? teamA : teamB === (Math.random() < 0.5 ? teamA : teamB) ? teamA : teamB
+            home,
+            away
           });
 
           found = true;
@@ -163,7 +179,7 @@ function generateDraw() {
   alert("Could not generate a balanced season. Try again.");
 }
 
-/* ================= MATCHDAY ================= */
+/* ---------------- MATCHDAY NAV ---------------- */
 
 function prevMatchday() {
   if (currentMatchday > 1) {
@@ -179,7 +195,7 @@ function nextMatchday() {
   }
 }
 
-/* ================= FIXTURES ================= */
+/* ---------------- FIXTURES ---------------- */
 
 function renderFixtures() {
   const box = document.getElementById("fixtures");
@@ -210,7 +226,7 @@ function renderFixtures() {
   box.innerHTML = html;
 }
 
-/* ================= TABLE ================= */
+/* ---------------- TABLE ---------------- */
 
 function calculateTable() {
   const table = {};
@@ -223,14 +239,15 @@ function calculateTable() {
     const hg = document.getElementById(`hg-${f.id}`)?.value;
     const ag = document.getElementById(`ag-${f.id}`)?.value;
 
-    if (hg === "" || ag === "" || hg == null || ag == null) return;
-
-    const home = table[f.home];
-    const away = table[f.away];
+    if (hg === "" || ag === "") return;
 
     const h = Number(hg);
     const a = Number(ag);
 
+    const home = table[f.home];
+    const away = table[f.away];
+
+    // real scoring rules
     if (h > a) {
       home.w++; home.pts += 3; away.l++;
     } else if (a > h) {
@@ -244,12 +261,14 @@ function calculateTable() {
     away.gf += a; away.ga += h;
   });
 
-  const sorted = Object.entries(table).sort((a,b) =>
-    b[1].pts - a[1].pts || (b[1].gf-b[1].ga) - (a[1].gf-a[1].ga)
+  const sorted = Object.entries(table).sort((a, b) =>
+    b[1].pts - a[1].pts || (b[1].gf - b[1].ga) - (a[1].gf - a[1].ga)
   );
 
   renderTable(sorted);
 }
+
+/* ---------------- TABLE UI ---------------- */
 
 function renderTable(sorted) {
   const box = document.getElementById("standings");
@@ -259,11 +278,12 @@ function renderTable(sorted) {
 
   sorted.forEach(([name, s], i) => {
     let style = "";
+
     if (i < 8) style = "background:green;color:white;";
     else if (i < 24) style = "background:gold;color:black;";
 
     html += `<tr style="${style}">
-      <td>${i+1}</td>
+      <td>${i + 1}</td>
       <td>${name}</td>
       <td>${s.pts}</td>
       <td>${s.w}</td>
@@ -276,6 +296,6 @@ function renderTable(sorted) {
   box.innerHTML = html;
 }
 
-/* ================= INIT ================= */
+/* ---------------- INIT ---------------- */
 
-renderTeamEditor();
+renderTeamEditor?.();
