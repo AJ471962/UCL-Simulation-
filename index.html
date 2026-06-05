@@ -4,27 +4,48 @@
   <title>UCL Simulator</title>
   <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
 
-<h1>UCL Simulator</h1>
-<button onclick="autoFillResults()">Simulate Matchday</button>
-<button onclick="generateDraw()">Generate League Phase Draw</button>
-<button onclick="renderTeams()">Show Teams</button>
+  <h1>UCL Simulator</h1>
 
+  <!-- MAIN ACTIONS -->
+  <button onclick="generateDraw()">Generate League Phase Draw</button>
+  <button onclick="calculateTable()">Update Standings</button>
+
+  <!-- OPTIONAL ACTION (only if you implement it in JS) -->
+  <button onclick="alert('Auto-fill not enabled in current script')">
+    Simulate Matchday (Auto)
+  </button>
+
+  <hr>
+
+  <!-- TEAM EDITOR -->
+  <h2>Team Editor</h2>
   <div id="teamEditor"></div>
-  
-<h2>Fixtures</h2>
-<div id="fixtures"></div>
 
-<h2>Enter Results</h2>
-<div id="resultsBox"></div>
+  <hr>
 
-<button onclick="calculateTable()">Update Standings</button>
+  <!-- FIXTURES -->
+  <h2>Fixtures</h2>
+  <div id="fixtures"></div>
 
-<h2>Standings</h2>
-<div id="standings"></div>
+  <hr>
 
-<script src="script.js"></script>
+  <!-- RESULTS INFO -->
+  <h2>Enter Results</h2>
+  <p>Fill scores in fixtures then press "Update Standings"</p>
+
+  <div id="resultsBox"></div>
+
+  <hr>
+
+  <!-- STANDINGS -->
+  <h2>Standings</h2>
+  <div id="standings"></div>
+
+  <!-- SCRIPT -->
+  <script src="script.js"></script>
 
 </body>
 </html>
