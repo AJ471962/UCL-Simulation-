@@ -125,27 +125,31 @@ function renderFixtures() {
         <h2>Matchday ${day}</h2>
     `;
 
-    fixtures.forEach(f => {
+    grouped[day].forEach(f => {
 
-  if (!f || !f.home || !f.away) return;
+      if (!f || !f.home || !f.away) return;
 
-  html += `
-    <div style="margin:8px 0;">
-      ${f.home}
+      html += `
+        <div style="margin:8px 0;">
+          ${f.home}
 
-      <input type="number" id="hg-${f.id}" style="width:50px;">
+          <input type="number" id="hg-${f.id}" style="width:50px;">
 
-      -
+          -
 
-      <input type="number" id="ag-${f.id}" style="width:50px;">
+          <input type="number" id="ag-${f.id}" style="width:50px;">
 
-      ${f.away}
-    </div>
-  `;
-});
+          ${f.away}
+        </div>
+      `;
+    });
+
+    html += `</div>`;
+  });
 
   document.getElementById("fixtures").innerHTML = html;
 }
+
 
 // TABLE ENGINE
 function calculateTable() {
