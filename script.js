@@ -46,9 +46,7 @@ let teams = DEFAULT_TEAMS.map(t => ({ ...t }));
 let fixtures = [];
 let currentMatchday = 1;
 
-/* 🔴 NEW: store saved scores */
-let savedResults = {}; 
-// format: { matchday: { fixtureId: {h, a} } }
+let savedResults = {};
 
 /* ---------------- HELPERS ---------------- */
 
@@ -85,6 +83,36 @@ function simulateMatch(home, away) {
   return "D";
 }
 
+/* ---------------- SAVE / RESET ---------------- */
+
+function saveMatchday() {
+  const dayFixtures = fixtures.filter(f => f.matchday === currentMatchday);
+
+  if (!savedResults[currentMatchday]) {
+    savedResults[currentMatchday] = {};
+  }
+
+  dayFixtures.forEach(f => {
+    const hg = document.getElementById(`hg-${f.id}`);
+    const ag = document.getElementById(`ag-${f.id}`);
+
+    if (!hg || !ag) return;
+    if (hg.value === "" || ag.value === "") return;
+
+    savedResults[currentMatchday][f.id] = {
+      h: Number(hg.value),
+      a: Number(ag.value)
+    };
+  });
+
+  alert(`Matchday ${currentMatchday} saved.`);
+}
+
+function resetMatchday() {
+  delete savedResults[currentMatchday];
+  renderFixtures();
+}
+
 /* ---------------- AUTO FILL ---------------- */
 
 function autoFillResults() {
@@ -105,47 +133,9 @@ function autoFillResults() {
       h = a = Math.floor(Math.random() * 3);
     }
 
-    const hg = document.getElementById(`hg-${f.id}`);
-    const ag = document.getElementById(`ag-${f.id}`);
-
-    if (hg) hg.value = h;
-    if (ag) ag.value = a;
+    document.getElementById(`hg-${f.id}`).value = h;
+    document.getElementById(`ag-${f.id}`).value = a;
   });
-}
-
-/* ---------------- SAVE MATCHDAY ---------------- */
-
-function saveMatchday() {
-  const dayFixtures = fixtures.filter(f => f.matchday === currentMatchday);
-
-  if (!savedResults[currentMatchday]) {
-    savedResults[currentMatchday] = {};
-  }
-
-  dayFixtures.forEach(f => {
-    const hg = document.getElementById(`hg-${f.id}`);
-    const ag = document.getElementById(`ag-${f.id}`);
-
-    if (!hg || !ag) return;
-
-    if (hg.value === "" || ag.value === "") return;
-
-    savedResults[currentMatchday][f.id] = {
-      h: Number(hg.value),
-      a: Number(ag.value)
-    };
-  });
-
-  alert(`Matchday ${currentMatchday} saved.`);
-}
-
-/* ---------------- RESET MATCHDAY ---------------- */
-
-function resetMatchday() {
-  if (!savedResults[currentMatchday]) return;
-
-  delete savedResults[currentMatchday];
-  renderFixtures();
 }
 
 /* ---------------- DRAW ---------------- */
@@ -161,7 +151,6 @@ function generateDraw() {
     const season = [];
     let nextId = 0;
     let success = true;
-
     const usedPairs = new Set();
 
     for (let day = 1; day <= MATCHDAYS; day++) {
@@ -220,7 +209,6 @@ function generateDraw() {
       }
 
       if (!success) break;
-
       season.push(...dayMatches);
     }
 
@@ -264,22 +252,19 @@ function renderFixtures() {
       <button onclick="nextMatchday()">Next</button>
       <button onclick="saveMatchday()">Save</button>
       <button onclick="resetMatchday()">Reset</button>
-      <b style="margin:0 10px;">Matchday ${currentMatchday}</b>
+      <button onclick="calculateTable()">Update Table</button>
+      <b style="margin-left:10px;">Matchday ${currentMatchday}</b>
   `;
 
   dayFixtures.forEach(f => {
-
     const saved = savedResults[currentMatchday]?.[f.id];
-
-    const hVal = saved ? saved.h : "";
-    const aVal = saved ? saved.a : "";
 
     html += `
       <div style="margin:8px 0;">
         ${f.home}
-        <input id="hg-${f.id}" type="number" value="${hVal}" style="width:50px;">
+        <input id="hg-${f.id}" type="number" value="${saved?.h ?? ""}" style="width:50px;">
         -
-        <input id="ag-${f.id}" type="number" value="${aVal}" style="width:50px;">
+        <input id="ag-${f.id}" type="number" value="${saved?.a ?? ""}" style="width:50px;">
         ${f.away}
       </div>
     `;
@@ -289,25 +274,38 @@ function renderFixtures() {
   box.innerHTML = html;
 }
 
-/* ---------------- TABLE ---------------- */
+/* ---------------- TABLE (FULL UPGRADE) ---------------- */
 
 function calculateTable() {
+
   const table = {};
 
   teams.forEach(t => {
-    table[t.name] = { pts: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0 };
+    table[t.name] = {
+      mp: 0,
+      w: 0,
+      d: 0,
+      l: 0,
+      gf: 0,
+      ga: 0,
+      gd: 0,
+      pts: 0
+    };
   });
 
-  fixtures.forEach(f => {
+  for (const f of fixtures) {
 
     const saved = savedResults[f.matchday]?.[f.id];
-    if (!saved) return;
+    if (!saved) continue;
 
     const h = saved.h;
     const a = saved.a;
 
     const home = table[f.home];
     const away = table[f.away];
+
+    home.mp++;
+    away.mp++;
 
     home.gf += h;
     home.ga += a;
@@ -316,18 +314,25 @@ function calculateTable() {
     away.ga += h;
 
     if (h > a) {
-      home.w++; home.pts += 3; away.l++;
+      home.w++; home.pts += 3;
+      away.l++;
     } else if (a > h) {
-      away.w++; away.pts += 3; home.l++;
+      away.w++; away.pts += 3;
+      home.l++;
     } else {
       home.d++; away.d++;
       home.pts++; away.pts++;
     }
-  });
+  }
+
+  for (const team in table) {
+    table[team].gd = table[team].gf - table[team].ga;
+  }
 
   const sorted = Object.entries(table).sort((a, b) =>
     b[1].pts - a[1].pts ||
-    (b[1].gf - b[1].ga) - (a[1].gf - a[1].ga)
+    b[1].gd - a[1].gd ||
+    b[1].gf - a[1].gf
   );
 
   renderTable(sorted);
@@ -336,10 +341,24 @@ function calculateTable() {
 /* ---------------- TABLE UI ---------------- */
 
 function renderTable(sorted) {
+
   const box = document.getElementById("standings");
 
-  let html = "<table border='1' style='width:100%'>";
-  html += "<tr><th>#</th><th>Team</th><th>Pts</th><th>W</th><th>D</th><th>L</th></tr>";
+  let html = `
+  <table border="1" style="width:100%; text-align:center;">
+    <tr>
+      <th>#</th>
+      <th>Team</th>
+      <th>MP</th>
+      <th>W</th>
+      <th>D</th>
+      <th>L</th>
+      <th>GF</th>
+      <th>GA</th>
+      <th>GD</th>
+      <th>Pts</th>
+    </tr>
+  `;
 
   sorted.forEach(([name, s], i) => {
 
@@ -351,15 +370,19 @@ function renderTable(sorted) {
       <tr style="${style}">
         <td>${i + 1}</td>
         <td>${name}</td>
-        <td>${s.pts}</td>
+        <td>${s.mp}</td>
         <td>${s.w}</td>
         <td>${s.d}</td>
         <td>${s.l}</td>
+        <td>${s.gf}</td>
+        <td>${s.ga}</td>
+        <td>${s.gd}</td>
+        <td>${s.pts}</td>
       </tr>
     `;
   });
 
-  html += "</table>";
+  html += `</table>`;
   box.innerHTML = html;
 }
 
