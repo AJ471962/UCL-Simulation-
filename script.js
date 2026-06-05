@@ -92,112 +92,112 @@ function validatePotSetup() {
   return POT_NUMBERS.every(pot => countTeamsInPot(pot) === 9) && teams.length === 36;
 }
 
-function createSeasonState() {
-  const remaining = {};
-  teams.forEach(t => {
-    remaining[t.name] = {
-      1: 2,
-      2: 2,
-      3: 2,
-      4: 2
-    };
-  });
-
-  return {
-    remaining,
-    playedPairs: new Set()
-  };
-}
-
 function totalRemainingForTeam(state, teamName) {
   const r = state.remaining[teamName];
   return r[1] + r[2] + r[3] + r[4];
 }
 
-function candidateOpponents(teamName, usedToday, state) {
-  const teamPot = getPot(teamName);
+function buildPairGraph() {
+  const neighbors = {};
+  teams.forEach(t => {
+    neighbors[t.name] = new Set();
+  });
 
-  return shuffleArray(
-    teams
-      .map(t => t.name)
-      .filter(opponentName => {
-        if (opponentName === teamName) return false;
-        if (usedToday.has(opponentName)) return false;
-        if (state.playedPairs.has(pairKey(teamName, opponentName))) return false;
+  function addEdge(a, b) {
+    if (!a || !b || a === b) return;
+    neighbors[a].add(b);
+    neighbors[b].add(a);
+  }
 
-        const opponentPot = getPot(opponentName);
-        if (!opponentPot) return false;
+  const pots = {};
+  POT_NUMBERS.forEach(pot => {
+    pots[pot] = shuffleArray(
+      teams.filter(t => Number(t.pot) === pot).map(t => t.name)
+    );
+  });
 
-        return (
-          state.remaining[teamName][opponentPot] > 0 &&
-          state.remaining[opponentName][teamPot] > 0 &&
-          totalRemainingForTeam(state, opponentName) > 0
-        );
-      })
-  );
+  // Same-pot matches: each team gets 2 within its own pot.
+  POT_NUMBERS.forEach(pot => {
+    const arr = pots[pot];
+    for (let i = 0; i < arr.length; i++) {
+      addEdge(arr[i], arr[(i + 1) % arr.length]);
+    }
+  });
+
+  // Cross-pot matches: each team gets 2 opponents from every other pot.
+  for (let i = 0; i < POT_NUMBERS.length; i++) {
+    for (let j = i + 1; j < POT_NUMBERS.length; j++) {
+      const potA = pots[POT_NUMBERS[i]];
+      const potB = pots[POT_NUMBERS[j]];
+
+      [0, 1].forEach(shift => {
+        for (let k = 0; k < 9; k++) {
+          addEdge(potA[k], potB[(k + shift) % 9]);
+        }
+      });
+    }
+  }
+
+  return neighbors;
 }
 
-function chooseNextTeam(usedToday, state) {
+function chooseNextTeam(usedToday, neighbors) {
   let bestTeam = null;
   let bestCount = Infinity;
 
-  const teamNames = shuffleArray(teams.map(t => t.name));
+  const shuffledTeams = shuffleArray(teams.map(t => t.name));
 
-  for (const teamName of teamNames) {
+  for (const teamName of shuffledTeams) {
     if (usedToday.has(teamName)) continue;
-    if (totalRemainingForTeam(state, teamName) <= 0) continue;
 
-    const candidates = candidateOpponents(teamName, usedToday, state);
+    const candidates = [...neighbors[teamName]].filter(op => !usedToday.has(op));
+
+    if (candidates.length === 0) {
+      return teamName;
+    }
 
     if (candidates.length < bestCount) {
       bestCount = candidates.length;
       bestTeam = teamName;
-    }
-
-    if (bestCount === 0) {
-      return bestTeam;
+      if (bestCount === 1) break;
     }
   }
 
   return bestTeam;
 }
 
-function buildMatchday(day, state) {
+function buildMatchday(day, neighbors) {
   const usedToday = new Set();
-  const pairs = [];
+  const matches = [];
 
   function recurse() {
     if (usedToday.size === teams.length) return true;
 
-    const teamA = chooseNextTeam(usedToday, state);
+    const teamA = chooseNextTeam(usedToday, neighbors);
     if (!teamA) return false;
 
-    const opponents = candidateOpponents(teamA, usedToday, state);
-    if (opponents.length === 0) return false;
+    const candidates = shuffleArray([...neighbors[teamA]].filter(op => !usedToday.has(op)));
+    if (candidates.length === 0) return false;
 
-    for (const teamB of opponents) {
-      const potA = getPot(teamA);
-      const potB = getPot(teamB);
-      const key = pairKey(teamA, teamB);
+    for (const teamB of candidates) {
+      if (!neighbors[teamA].has(teamB)) continue;
 
       usedToday.add(teamA);
       usedToday.add(teamB);
-      state.playedPairs.add(key);
+      neighbors[teamA].delete(teamB);
+      neighbors[teamB].delete(teamA);
 
-      state.remaining[teamA][potB]--;
-      state.remaining[teamB][potA]--;
-
-      pairs.push({
-        home: teamA,
-        away: teamB
+      const homeFirst = Math.random() < 0.5;
+      matches.push({
+        home: homeFirst ? teamA : teamB,
+        away: homeFirst ? teamB : teamA
       });
 
       if (recurse()) return true;
 
-      pairs.pop();
-      state.remaining[teamA][potB]++;
-      state.remaining[teamB][potA]++;
-      state.playedPairs.delete(key);
+      matches.pop();
+      neighbors[teamA].add(teamB);
+      neighbors[teamB].add(teamA);
       usedToday.delete(teamA);
       usedToday.delete(teamB);
     }
@@ -205,121 +205,42 @@ function buildMatchday(day, state) {
     return false;
   }
 
-  return recurse() ? pairs : null;
-}
-
-function pairKey(a, b) {
-  return a < b ? `${a}__${b}` : `${b}__${a}`;
-}
-
-function buildPotTargets() {
-  const targets = {};
-  teams.forEach(t => {
-    targets[t.name] = shuffleArray([1, 1, 2, 2, 3, 3, 4, 4]);
-  });
-  return targets;
+  return recurse() ? matches : null;
 }
 
 // DRAW
 function generateDraw() {
   fixtures = [];
 
-  const maxAttempts = 100;
+  if (!validatePotSetup()) {
+    alert("Each pot must contain exactly 9 teams, and there must be 36 teams total.");
+    return;
+  }
+
+  const maxAttempts = 200;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const targets = buildPotTargets();
-    const pairHistory = new Set();
+    const neighbors = buildPairGraph();
     const season = [];
     let nextId = 0;
     let success = true;
 
     for (let day = 1; day <= MATCHDAYS; day++) {
-      const usedToday = new Set();
-      const dayMatches = [];
+      const dayMatches = buildMatchday(day, neighbors);
 
-      function candidatesFor(teamName) {
-        const teamPot = getPot(teamName);
-
-        return shuffleArray(
-          teams
-            .map(t => t.name)
-            .filter(op => {
-              if (op === teamName) return false;
-              if (usedToday.has(op)) return false;
-              if (pairHistory.has(pairKey(teamName, op))) return false;
-              if (targets[teamName][day - 1] !== getPot(op)) return false;
-              if (targets[op][day - 1] !== teamPot) return false;
-              return true;
-            })
-        );
-      }
-
-      function chooseTeam() {
-        let chosen = null;
-        let chosenCandidates = null;
-
-        const shuffledTeams = shuffleArray(teams.map(t => t.name));
-
-        for (const teamName of shuffledTeams) {
-          if (usedToday.has(teamName)) continue;
-
-          const candidates = candidatesFor(teamName);
-
-          if (candidates.length === 0) {
-            return teamName;
-          }
-
-          if (!chosen || candidates.length < chosenCandidates.length) {
-            chosen = teamName;
-            chosenCandidates = candidates;
-            if (candidates.length === 1) break;
-          }
-        }
-
-        return chosen;
-      }
-
-      function fillDay() {
-        if (usedToday.size === teams.length) return true;
-
-        const teamA = chooseTeam();
-        if (!teamA) return false;
-
-        const candidates = candidatesFor(teamA);
-        if (candidates.length === 0) return false;
-
-        for (const teamB of candidates) {
-          const key = pairKey(teamA, teamB);
-
-          usedToday.add(teamA);
-          usedToday.add(teamB);
-          pairHistory.add(key);
-
-          dayMatches.push({
-            id: nextId++,
-            matchday: day,
-            home: teamA,
-            away: teamB
-          });
-
-          if (fillDay()) return true;
-
-          dayMatches.pop();
-          pairHistory.delete(key);
-          usedToday.delete(teamA);
-          usedToday.delete(teamB);
-          nextId--;
-        }
-
-        return false;
-      }
-
-      if (!fillDay()) {
+      if (!dayMatches || dayMatches.length !== 18) {
         success = false;
         break;
       }
 
-      season.push(...dayMatches);
+      dayMatches.forEach(match => {
+        season.push({
+          id: nextId++,
+          matchday: day,
+          home: match.home,
+          away: match.away
+        });
+      });
     }
 
     if (success && season.length === 144) {
@@ -382,7 +303,7 @@ function calculateTable() {
     return;
   }
 
-  let table = {};
+  const table = {};
 
   teams.forEach(t => {
     table[t.name] = {
@@ -398,19 +319,19 @@ function calculateTable() {
   fixtures.forEach(f => {
     if (!f || !f.home || !f.away) return;
 
-    let hgInput = document.getElementById(`hg-${f.id}`);
-    let agInput = document.getElementById(`ag-${f.id}`);
+    const hgInput = document.getElementById(`hg-${f.id}`);
+    const agInput = document.getElementById(`ag-${f.id}`);
 
     if (!hgInput || !agInput) return;
     if (hgInput.value.trim() === "" || agInput.value.trim() === "") return;
 
-    let hg = parseInt(hgInput.value, 10);
-    let ag = parseInt(agInput.value, 10);
+    const hg = parseInt(hgInput.value, 10);
+    const ag = parseInt(agInput.value, 10);
 
     if (Number.isNaN(hg) || Number.isNaN(ag)) return;
 
-    let home = table[f.home];
-    let away = table[f.away];
+    const home = table[f.home];
+    const away = table[f.away];
 
     if (!home || !away) return;
 
@@ -472,7 +393,7 @@ function renderTable(sorted) {
   if (standingsBox) standingsBox.innerHTML = html;
 }
 
-// POT EDITOR (optional)
+// POT EDITOR
 function renderTeamEditor() {
   const editor = document.getElementById("teamEditor");
   if (!editor) return;
