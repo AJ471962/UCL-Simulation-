@@ -13,10 +13,8 @@
   <button onclick="generateDraw()">Generate League Phase Draw</button>
   <button onclick="calculateTable()">Update Standings</button>
 
-  <!-- OPTIONAL ACTION (only if you implement it in JS) -->
-  <button onclick="alert('Auto-fill not enabled in current script')">
-    Simulate Matchday (Auto)
-  </button>
+  <!-- FIXED: NOW ACTUALLY CALLS FUNCTION -->
+  <button onclick="autoFillResults()">Simulate Matchday (Auto)</button>
 
   <hr>
 
@@ -44,8 +42,8 @@
   <h2>Standings</h2>
   <div id="standings"></div>
 
-  <!-- SCRIPT -->
-  <script src="script.js"></script>
+  <!-- SCRIPT (IMPORTANT: cache-bust added) -->
+  <script src="script.js?v=3"></script>
 
 </body>
 </html>
