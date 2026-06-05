@@ -53,7 +53,7 @@ return teams.find(t => t.name === team)?.pot ?? 4;
 }
 
 function pairKey(a, b) {
-return a < b ? ${a}${b} : ${b}${a};
+return a < b ? `${a}__${b}` : `${b}__${a}`;
 }
 
 function shuffleArray(arr) {
@@ -106,12 +106,11 @@ h = Math.floor(Math.random() * a);
 h = a = Math.floor(Math.random() * 3);
 }
 
-const hg = document.getElementById(hg-${f.id});
-const ag = document.getElementById(ag-${f.id});
+const hg = document.getElementById(`hg-${f.id}`);
+const ag = document.getElementById(`ag-${f.id}`);
 
 if (hg) hg.value = h;
 if (ag) ag.value = a;
-
 });
 }
 
@@ -119,7 +118,7 @@ if (ag) ag.value = a;
 
 function generateDraw() {
 fixtures = [];
-currentMatchday = 1; // 🔴 IMPORTANT RESET
+currentMatchday = 1;
 
 const maxAttempts = 80;
 
@@ -132,56 +131,60 @@ let success = true;
 const usedPairs = new Set();
 
 for (let day = 1; day <= MATCHDAYS; day++) {
+
 const usedToday = new Set();
 const teamList = shuffleArray(teams.map(t => t.name));
 const dayMatches = [];
 
 for (const teamA of teamList) {
+
 if (usedToday.has(teamA)) continue;
 
-const opponents = shuffleArray(    
-  teams.map(t => t.name).filter(op =>    
-    op !== teamA &&    
-    !usedToday.has(op) &&    
-    !usedPairs.has(pairKey(teamA, op))    
-  )    
-);    
+const opponents = shuffleArray(
+teams
+.map(t => t.name)
+.filter(op =>
+op !== teamA &&
+!usedToday.has(op) &&
+!usedPairs.has(pairKey(teamA, op))
+)
+);
 
-let found = false;    
+let found = false;
 
-for (const teamB of opponents) {    
-  if (usedToday.has(teamB)) continue;    
+for (const teamB of opponents) {
 
-  usedToday.add(teamA);    
-  usedToday.add(teamB);    
-  usedPairs.add(pairKey(teamA, teamB));    
+if (usedToday.has(teamB)) continue;
 
-  const result = simulateMatch(teamA, teamB);    
+usedToday.add(teamA);
+usedToday.add(teamB);
+usedPairs.add(pairKey(teamA, teamB));
 
-  let home = teamA;    
-  let away = teamB;    
+const result = simulateMatch(teamA, teamB);
 
-  if (result === "A") {    
-    home = teamB;    
-    away = teamA;    
-  }    
+let home = teamA;
+let away = teamB;
 
-  dayMatches.push({    
-    id: nextId++,    
-    matchday: day,    
-    home,    
-    away    
-  });    
-
-  found = true;    
-  break;    
-}    
-
-if (!found) {    
-  success = false;    
-  break;    
+if (result === "A") {
+home = teamB;
+away = teamA;
 }
 
+dayMatches.push({
+id: nextId++,
+matchday: day,
+home,
+away
+});
+
+found = true;
+break;
+}
+
+if (!found) {
+success = false;
+break;
+}
 }
 
 if (!success) break;
@@ -200,6 +203,22 @@ return;
 alert("Could not generate a balanced season. Try again.");
 }
 
+/* ---------------- MATCHDAY ---------------- */
+
+function prevMatchday() {
+if (currentMatchday > 1) {
+currentMatchday--;
+renderFixtures();
+}
+}
+
+function nextMatchday() {
+if (currentMatchday < MATCHDAYS) {
+currentMatchday++;
+renderFixtures();
+}
+}
+
 /* ---------------- FIXTURES ---------------- */
 
 function renderFixtures() {
@@ -208,17 +227,30 @@ if (!box) return;
 
 const dayFixtures = fixtures.filter(f => f.matchday === currentMatchday);
 
-let html =   <div style="margin:16px; padding:12px; background:#1b1b1b; border-radius:10px;">   <button onclick="prevMatchday()">Prev</button>   <b style="margin:0 10px;">Matchday ${currentMatchday}</b>   <button onclick="nextMatchday()">Next</button>  ;
+let html = `
+<div style="margin:16px; padding:12px; background:#1b1b1b; border-radius:10px;">
+<button onclick="prevMatchday()">Prev</button>
+<b style="margin:0 10px;">Matchday ${currentMatchday}</b>
+<button onclick="nextMatchday()">Next</button>
+`;
 
 dayFixtures.forEach(f => {
-html +=   <div style="margin:8px 0;">   ${f.home}   <input id="hg-${f.id}" type="number" value="" style="width:50px;">   -   <input id="ag-${f.id}" type="number" value="" style="width:50px;">   ${f.away}   </div>  ;
+html += `
+<div style="margin:8px 0;">
+${f.home}
+<input id="hg-${f.id}" type="number" style="width:50px;">
+-
+<input id="ag-${f.id}" type="number" style="width:50px;">
+${f.away}
+</div>
+`;
 });
 
-html += </div>;
+html += `</div>`;
 box.innerHTML = html;
 }
 
-/* ---------------- TABLE (FIXED) ---------------- */
+/* ---------------- TABLE ---------------- */
 
 function calculateTable() {
 const table = {};
@@ -228,15 +260,15 @@ table[t.name] = { pts: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0 };
 });
 
 fixtures.forEach(f => {
-const hgEl = document.getElementById(hg-${f.id});
-const agEl = document.getElementById(ag-${f.id});
+
+const hgEl = document.getElementById(`hg-${f.id}`);
+const agEl = document.getElementById(`ag-${f.id}`);
 
 if (!hgEl || !agEl) return;
 
 const hgRaw = hgEl.value;
 const agRaw = agEl.value;
 
-// 🔴 STRICT CHECK: ignore unplayed matches
 if (hgRaw === "" || agRaw === "") return;
 
 const h = Number(hgRaw);
@@ -281,20 +313,22 @@ let html = "<table border='1' style='width:100%'>";
 html += "<tr><th>#</th><th>Team</th><th>Pts</th><th>W</th><th>D</th><th>L</th></tr>";
 
 sorted.forEach(([name, s], i) => {
-let style = "";
 
+let style = "";
 if (i < 8) style = "background:green;color:white;";
 else if (i < 24) style = "background:gold;color:black;";
 
-html += `<tr style="${style}">
-
-  <td>${i + 1}</td>    
-  <td>${name}</td>    
-  <td>${s.pts}</td>    
-  <td>${s.w}</td>    
-  <td>${s.d}</td>    
-  <td>${s.l}</td>    
-</tr>`;  });
+html += `
+<tr style="${style}">
+<td>${i + 1}</td>
+<td>${name}</td>
+<td>${s.pts}</td>
+<td>${s.w}</td>
+<td>${s.d}</td>
+<td>${s.l}</td>
+</tr>
+`;
+});
 
 html += "</table>";
 box.innerHTML = html;
