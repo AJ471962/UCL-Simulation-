@@ -50,17 +50,9 @@ let currentMatchday = 1;
 function loadTeams() {
   try {
     const saved = JSON.parse(localStorage.getItem("ucl_teams"));
-    if (Array.isArray(saved) && saved.length === 36) {
-      return saved;
-    }
-  } catch (e) {
-    // ignore and fall back to defaults
-  }
-  return cloneDefaultTeams();
-}
-
-function cloneDefaultTeams() {
-  return DEFAULT_TEAMS.map(t => ({ name: t.name, pot: t.pot }));
+    if (Array.isArray(saved) && saved.length === 36) return saved;
+  } catch {}
+  return DEFAULT_TEAMS.map(t => ({ ...t }));
 }
 
 function saveTeams() {
@@ -68,8 +60,7 @@ function saveTeams() {
 }
 
 function getPot(teamName) {
-  const team = teams.find(t => t.name === teamName);
-  return team ? Number(team.pot) : null;
+  return teams.find(t => t.name === teamName)?.pot ?? null;
 }
 
 function pairKey(a, b) {
@@ -85,27 +76,94 @@ function shuffleArray(arr) {
   return copy;
 }
 
-function countTeamsInPot(pot) {
-  return teams.filter(t => Number(t.pot) === pot).length;
-}
-
 function validatePotSetup() {
-  return POT_NUMBERS.every(pot => countTeamsInPot(pot) === 9) && teams.length === 36;
+  return POT_NUMBERS.every(p => teams.filter(t => t.pot == p).length === 9);
 }
 
-function createSeasonState() {
-  const remaining = {};
-  teams.forEach(t => {
-    remaining[t.name] = { 1: 2, 2: 2, 3: 2, 4: 2 };
-  });
+/* ================= DRAW ================= */
 
-  return { remaining };
+function generateDraw() {
+  fixtures = [];
+
+  if (!validatePotSetup()) {
+    alert("Each pot must have 9 teams.");
+    return;
+  }
+
+  const maxAttempts = 100;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+
+    const season = [];
+    let nextId = 0;
+    let success = true;
+
+    const usedPairs = new Set();
+
+    for (let day = 1; day <= MATCHDAYS; day++) {
+      const usedToday = new Set();
+      const dayMatches = [];
+
+      const teamList = shuffleArray(teams.map(t => t.name));
+
+      for (const teamA of teamList) {
+        if (usedToday.has(teamA)) continue;
+
+        const opponents = shuffleArray(
+          teams
+            .map(t => t.name)
+            .filter(op =>
+              op !== teamA &&
+              !usedToday.has(op) &&
+              !usedPairs.has(pairKey(teamA, op))
+            )
+        );
+
+        let found = false;
+
+        for (const teamB of opponents) {
+          const key = pairKey(teamA, teamB);
+
+          if (usedToday.has(teamB)) continue;
+
+          usedToday.add(teamA);
+          usedToday.add(teamB);
+          usedPairs.add(key);
+
+          dayMatches.push({
+            id: nextId++,
+            matchday: day,
+            home: Math.random() < 0.5 ? teamA : teamB,
+            away: Math.random() < 0.5 ? teamA : teamB === (Math.random() < 0.5 ? teamA : teamB) ? teamA : teamB
+          });
+
+          found = true;
+          break;
+        }
+
+        if (!found && usedToday.size < teams.length) {
+          success = false;
+          break;
+        }
+      }
+
+      if (!success) break;
+
+      season.push(...dayMatches);
+    }
+
+    if (success && season.length === 144) {
+      fixtures = season;
+      currentMatchday = 1;
+      renderFixtures();
+      return;
+    }
+  }
+
+  alert("Could not generate a balanced season. Try again.");
 }
 
-function totalRemainingForTeam(state, teamName) {
-  const r = state.remaining[teamName];
-  return r[1] + r[2] + r[3] + r[4];
-}
+/* ================= MATCHDAY ================= */
 
 function prevMatchday() {
   if (currentMatchday > 1) {
@@ -121,356 +179,103 @@ function nextMatchday() {
   }
 }
 
-function buildNeighborGraph() {
-  const graph = {};
-  teams.forEach(t => {
-    graph[t.name] = new Set();
-  });
+/* ================= FIXTURES ================= */
 
-  const pots = {};
-  POT_NUMBERS.forEach(pot => {
-    pots[pot] = shuffleArray(
-      teams.filter(t => Number(t.pot) === pot).map(t => t.name)
-    );
-  });
-
-  function addEdge(a, b) {
-    if (!a || !b || a === b) return;
-    graph[a].add(b);
-    graph[b].add(a);
-  }
-
-  POT_NUMBERS.forEach(pot => {
-    const arr = pots[pot];
-    for (let i = 0; i < arr.length; i++) {
-      addEdge(arr[i], arr[(i + 1) % arr.length]);
-    }
-  });
-
-  for (let i = 0; i < POT_NUMBERS.length; i++) {
-    for (let j = i + 1; j < POT_NUMBERS.length; j++) {
-      const potA = pots[POT_NUMBERS[i]];
-      const potB = pots[POT_NUMBERS[j]];
-
-      [0, 1].forEach(shift => {
-        for (let k = 0; k < 9; k++) {
-          addEdge(potA[k], potB[(k + shift) % 9]);
-        }
-      });
-    }
-  }
-
-  return graph;
-}
-
-function findPerfectMatching(graph) {
-  const unmatched = new Set(teams.map(t => t.name));
-  const pairs = [];
-
-  function recurse() {
-    if (unmatched.size === 0) return true;
-
-    let chosenTeam = null;
-    let chosenOptions = null;
-
-    const shuffledTeams = shuffleArray([...unmatched]);
-
-    for (const team of shuffledTeams) {
-      const options = shuffleArray(
-        [...graph[team]].filter(op => unmatched.has(op))
-      );
-
-      if (options.length === 0) {
-        return false;
-      }
-
-      if (!chosenTeam || options.length < chosenOptions.length) {
-        chosenTeam = team;
-        chosenOptions = options;
-        if (options.length === 1) break;
-      }
-    }
-
-    for (const opp of chosenOptions) {
-      if (!unmatched.has(chosenTeam) || !unmatched.has(opp)) continue;
-
-      unmatched.delete(chosenTeam);
-      unmatched.delete(opp);
-      pairs.push([chosenTeam, opp]);
-
-      if (recurse()) return true;
-
-      pairs.pop();
-      unmatched.add(chosenTeam);
-      unmatched.add(opp);
-    }
-
-    return false;
-  }
-
-  return recurse() ? pairs.slice() : null;
-}
-
-function removePairsFromGraph(graph, pairs) {
-  pairs.forEach(([a, b]) => {
-    graph[a].delete(b);
-    graph[b].delete(a);
-  });
-}
-
-// DRAW
-function generateDraw() {
-  fixtures = [];
-
-  if (!validatePotSetup()) {
-    alert("Each pot must contain exactly 9 teams, and there must be 36 teams total.");
-    return;
-  }
-
-  const maxAttempts = 200;
-
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const graph = buildNeighborGraph();
-    const season = [];
-    let nextId = 0;
-    let success = true;
-
-    for (let day = 1; day <= MATCHDAYS; day++) {
-      const matching = findPerfectMatching(graph);
-
-      if (!matching || matching.length !== 18) {
-        success = false;
-        break;
-      }
-
-      matching.forEach(([a, b]) => {
-        const homeFirst = Math.random() < 0.5;
-        season.push({
-          id: nextId++,
-          matchday: day,
-          home: homeFirst ? a : b,
-          away: homeFirst ? b : a
-        });
-      });
-
-      removePairsFromGraph(graph, matching);
-    }
-
-    if (success && season.length === 144) {
-  fixtures = season;
-  currentMatchday = 1;
-  renderFixtures();
-  return;
-    }
-
-  alert("Could not generate a balanced season. Tap Generate League Phase Draw again.");
-}
-
-// SHOW FIXTURES + INPUT BOXES
 function renderFixtures() {
-  const fixturesBox = document.getElementById("fixtures");
-  if (!fixturesBox) return;
+  const box = document.getElementById("fixtures");
+  if (!box) return;
 
   const dayFixtures = fixtures.filter(f => f.matchday === currentMatchday);
 
   let html = `
-    <div style="margin:16px 0; padding:12px; background:#1b1b1b; border-radius:10px;">
-      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:12px;">
-        <button onclick="prevMatchday()" ${currentMatchday === 1 ? "disabled" : ""}>Previous</button>
-        <h2 style="margin:0;">Matchday ${currentMatchday}</h2>
-        <button onclick="nextMatchday()" ${currentMatchday === MATCHDAYS ? "disabled" : ""}>Next</button>
-      </div>
+    <div style="margin:16px; padding:12px; background:#1b1b1b; border-radius:10px;">
+      <button onclick="prevMatchday()">Prev</button>
+      <b style="margin:0 10px;">Matchday ${currentMatchday}</b>
+      <button onclick="nextMatchday()">Next</button>
   `;
 
   dayFixtures.forEach(f => {
     html += `
-      <div style="margin:8px 0; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-        <span style="min-width:160px;">${f.home}</span>
-        <input type="number" id="hg-${f.id}" style="width:60px;">
-        <span>-</span>
-        <input type="number" id="ag-${f.id}" style="width:60px;">
-        <span style="min-width:160px;">${f.away}</span>
+      <div style="margin:8px 0;">
+        ${f.home}
+        <input id="hg-${f.id}" type="number" style="width:50px;">
+        -
+        <input id="ag-${f.id}" type="number" style="width:50px;">
+        ${f.away}
       </div>
     `;
   });
 
   html += `</div>`;
-
-  fixturesBox.innerHTML = html;
+  box.innerHTML = html;
 }
 
-// TABLE ENGINE
+/* ================= TABLE ================= */
+
 function calculateTable() {
-  const standingsBox = document.getElementById("standings");
-  if (!standingsBox) return;
-
-  if (fixtures.length === 0) {
-    standingsBox.innerHTML = "<p>No fixtures yet. Generate the draw first.</p>";
-    return;
-  }
-
   const table = {};
+
   teams.forEach(t => {
-    table[t.name] = {
-      pts: 0,
-      w: 0,
-      d: 0,
-      l: 0,
-      gf: 0,
-      ga: 0
-    };
+    table[t.name] = { pts: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0 };
   });
 
   fixtures.forEach(f => {
-    if (!f || !f.home || !f.away) return;
+    const hg = document.getElementById(`hg-${f.id}`)?.value;
+    const ag = document.getElementById(`ag-${f.id}`)?.value;
 
-    const hgInput = document.getElementById(`hg-${f.id}`);
-    const agInput = document.getElementById(`ag-${f.id}`);
-
-    if (!hgInput || !agInput) return;
-    if (hgInput.value.trim() === "" || agInput.value.trim() === "") return;
-
-    const hg = parseInt(hgInput.value, 10);
-    const ag = parseInt(agInput.value, 10);
-
-    if (Number.isNaN(hg) || Number.isNaN(ag)) return;
+    if (hg === "" || ag === "" || hg == null || ag == null) return;
 
     const home = table[f.home];
     const away = table[f.away];
-    if (!home || !away) return;
 
-    home.gf += hg;
-    home.ga += ag;
-    away.gf += ag;
-    away.ga += hg;
+    const h = Number(hg);
+    const a = Number(ag);
 
-    if (hg > ag) {
-      home.w++;
-      home.pts += 3;
-      away.l++;
-    } else if (ag > hg) {
-      away.w++;
-      away.pts += 3;
-      home.l++;
+    if (h > a) {
+      home.w++; home.pts += 3; away.l++;
+    } else if (a > h) {
+      away.w++; away.pts += 3; home.l++;
     } else {
-      home.d++;
-      away.d++;
-      home.pts += 1;
-      away.pts += 1;
+      home.d++; away.d++;
+      home.pts++; away.pts++;
     }
+
+    home.gf += h; home.ga += a;
+    away.gf += a; away.ga += h;
   });
 
-  const sorted = Object.entries(table).sort((a, b) => {
-    const aGD = a[1].gf - a[1].ga;
-    const bGD = b[1].gf - b[1].ga;
-    return b[1].pts - a[1].pts || bGD - aGD || b[1].gf - a[1].gf;
-  });
+  const sorted = Object.entries(table).sort((a,b) =>
+    b[1].pts - a[1].pts || (b[1].gf-b[1].ga) - (a[1].gf-a[1].ga)
+  );
 
   renderTable(sorted);
 }
 
-// SHOW TABLE
 function renderTable(sorted) {
-  let html = "<table border='1' style='width:100%; border-collapse:collapse;'>";
-  html += "<tr><th>#</th><th>Team</th><th>Pts</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>GD</th></tr>";
+  const box = document.getElementById("standings");
 
-  sorted.forEach(([name, stats], index) => {
-    const position = index + 1;
-    const gd = stats.gf - stats.ga;
+  let html = "<table border='1' style='width:100%'>";
+  html += "<tr><th>#</th><th>Team</th><th>Pts</th><th>W</th><th>D</th><th>L</th></tr>";
 
-    let rowStyle = "";
-    if (position <= 8) {
-      rowStyle = "background:#1f8f3a;color:white;";
-    } else if (position <= 24) {
-      rowStyle = "background:#b8860b;color:white;";
-    }
+  sorted.forEach(([name, s], i) => {
+    let style = "";
+    if (i < 8) style = "background:green;color:white;";
+    else if (i < 24) style = "background:gold;color:black;";
 
-    html += `
-      <tr style="${rowStyle}">
-        <td>${position}</td>
-        <td>${name}</td>
-        <td>${stats.pts}</td>
-        <td>${stats.w}</td>
-        <td>${stats.d}</td>
-        <td>${stats.l}</td>
-        <td>${stats.gf}</td>
-        <td>${stats.ga}</td>
-        <td>${gd}</td>
-      </tr>
-    `;
+    html += `<tr style="${style}">
+      <td>${i+1}</td>
+      <td>${name}</td>
+      <td>${s.pts}</td>
+      <td>${s.w}</td>
+      <td>${s.d}</td>
+      <td>${s.l}</td>
+    </tr>`;
   });
 
   html += "</table>";
-
-  const standingsBox = document.getElementById("standings");
-  if (standingsBox) standingsBox.innerHTML = html;
+  box.innerHTML = html;
 }
 
-// POT EDITOR
-function renderTeamEditor() {
-  const editor = document.getElementById("teamEditor");
-  if (!editor) return;
+/* ================= INIT ================= */
 
-  let html = `
-    <div style="margin:16px 0; padding:12px; background:#1b1b1b; border-radius:10px;">
-      <h2>Edit Pots</h2>
-      <button onclick="savePots()" style="margin-right:8px;">Save Pots</button>
-      <button onclick="restoreDefaultTeams()">Restore Default Pots</button>
-      <div style="display:grid; gap:8px; margin-top:12px;">
-  `;
-
-  teams.forEach((team, index) => {
-    html += `
-      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-        <span style="min-width:180px;">${team.name}</span>
-        <select id="pot-${index}">
-          <option value="1" ${Number(team.pot) === 1 ? "selected" : ""}>Pot 1</option>
-          <option value="2" ${Number(team.pot) === 2 ? "selected" : ""}>Pot 2</option>
-          <option value="3" ${Number(team.pot) === 3 ? "selected" : ""}>Pot 3</option>
-          <option value="4" ${Number(team.pot) === 4 ? "selected" : ""}>Pot 4</option>
-        </select>
-      </div>
-    `;
-  });
-
-  html += `
-      </div>
-    </div>
-  `;
-
-  editor.innerHTML = html;
-}
-
-function savePots() {
-  teams = teams.map((team, index) => {
-    const select = document.getElementById(`pot-${index}`);
-    const pot = select ? Number(select.value) : Number(team.pot);
-    return { name: team.name, pot };
-  });
-
-  saveTeams();
-  resetSeason(false);
-  renderTeamEditor();
-}
-
-function restoreDefaultTeams() {
-  teams = cloneDefaultTeams();
-  saveTeams();
-  resetSeason(false);
-  renderTeamEditor();
-}
-
-function resetSeason(keepEditor = true) {
-  fixtures = [];
-
-  const fixturesBox = document.getElementById("fixtures");
-  if (fixturesBox) fixturesBox.innerHTML = "";
-
-  const standingsBox = document.getElementById("standings");
-  if (standingsBox) standingsBox.innerHTML = "";
-
-  if (keepEditor) renderTeamEditor();
-}
-
-// Initial UI build
 renderTeamEditor();
