@@ -45,6 +45,7 @@ const POT_NUMBERS = [1, 2, 3, 4];
 
 let teams = loadTeams();
 let fixtures = [];
+let currentMatchday = 1;
 
 function loadTeams() {
   try {
@@ -104,6 +105,20 @@ function createSeasonState() {
 function totalRemainingForTeam(state, teamName) {
   const r = state.remaining[teamName];
   return r[1] + r[2] + r[3] + r[4];
+}
+
+function prevMatchday() {
+  if (currentMatchday > 1) {
+    currentMatchday--;
+    renderFixtures();
+  }
+}
+
+function nextMatchday() {
+  if (currentMatchday < MATCHDAYS) {
+    currentMatchday++;
+    renderFixtures();
+  }
 }
 
 function buildNeighborGraph() {
@@ -242,11 +257,11 @@ function generateDraw() {
     }
 
     if (success && season.length === 144) {
-      fixtures = season;
-      renderFixtures();
-      return;
+  fixtures = season;
+  currentMatchday = 1;
+  renderFixtures();
+  return;
     }
-  }
 
   alert("Could not generate a balanced season. Tap Generate League Phase Draw again.");
 }
@@ -256,37 +271,30 @@ function renderFixtures() {
   const fixturesBox = document.getElementById("fixtures");
   if (!fixturesBox) return;
 
-  const grouped = {};
-  for (const f of fixtures) {
-    if (!grouped[f.matchday]) grouped[f.matchday] = [];
-    grouped[f.matchday].push(f);
-  }
+  const dayFixtures = fixtures.filter(f => f.matchday === currentMatchday);
 
-  let html = "";
+  let html = `
+    <div style="margin:16px 0; padding:12px; background:#1b1b1b; border-radius:10px;">
+      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:12px;">
+        <button onclick="prevMatchday()" ${currentMatchday === 1 ? "disabled" : ""}>Previous</button>
+        <h2 style="margin:0;">Matchday ${currentMatchday}</h2>
+        <button onclick="nextMatchday()" ${currentMatchday === MATCHDAYS ? "disabled" : ""}>Next</button>
+      </div>
+  `;
 
-  for (let day = 1; day <= MATCHDAYS; day++) {
-    const dayFixtures = grouped[day] || [];
-    if (dayFixtures.length === 0) continue;
-
+  dayFixtures.forEach(f => {
     html += `
-      <div style="margin-top:20px; padding:12px; background:#222; border-left:4px solid #00ff88; border-radius:10px;">
-        <h2 style="margin-top:0;">Matchday ${day}</h2>
+      <div style="margin:8px 0; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+        <span style="min-width:160px;">${f.home}</span>
+        <input type="number" id="hg-${f.id}" style="width:60px;">
+        <span>-</span>
+        <input type="number" id="ag-${f.id}" style="width:60px;">
+        <span style="min-width:160px;">${f.away}</span>
+      </div>
     `;
+  });
 
-    dayFixtures.forEach(f => {
-      html += `
-        <div style="margin:8px 0; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-          <span style="min-width:160px;">${f.home}</span>
-          <input type="number" id="hg-${f.id}" style="width:60px;">
-          <span>-</span>
-          <input type="number" id="ag-${f.id}" style="width:60px;">
-          <span style="min-width:160px;">${f.away}</span>
-        </div>
-      `;
-    });
-
-    html += `</div>`;
-  }
+  html += `</div>`;
 
   fixturesBox.innerHTML = html;
 }
