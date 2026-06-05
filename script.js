@@ -41,13 +41,12 @@ const DEFAULT_TEAMS = [
 ];
 
 const MATCHDAYS = 8;
-const POT_NUMBERS = [1, 2, 3, 4];
 
 let teams = DEFAULT_TEAMS.map(t => ({ ...t }));
 let fixtures = [];
 let currentMatchday = 1;
 
-/* ---------------- helpers ---------------- */
+/* ---------------- HELPERS ---------------- */
 
 function getPot(team) {
   return teams.find(t => t.name === team)?.pot ?? 4;
@@ -66,29 +65,23 @@ function shuffleArray(arr) {
   return copy;
 }
 
-/* ---------------- MATCH RESULT ENGINE (NEW REALISM) ---------------- */
+/* ---------------- REALISTIC RESULT SIM ---------------- */
 
 function simulateMatch(home, away) {
   const hPot = getPot(home);
   const aPot = getPot(away);
 
-  // strength difference (lower pot = stronger)
-  const strengthDiff = (aPot - hPot);
+  const strength = (aPot - hPot) * 0.12;
 
-  // base randomness
-  let homeScore = Math.random();
-  let awayScore = Math.random();
+  const homeScore = Math.random() + strength;
+  const awayScore = Math.random();
 
-  // stronger team advantage
-  homeScore += strengthDiff * 0.15;
-
-  // convert to result
-  if (homeScore > awayScore + 0.15) return "H";
-  if (awayScore > homeScore + 0.15) return "A";
+  if (homeScore > awayScore + 0.18) return "H";
+  if (awayScore > homeScore + 0.18) return "A";
   return "D";
 }
 
-/* ---------------- DRAW ---------------- */
+/* ---------------- DRAW (FIXED) ---------------- */
 
 function generateDraw() {
   fixtures = [];
@@ -100,14 +93,12 @@ function generateDraw() {
     const season = [];
     let nextId = 0;
     let success = true;
-
     const usedPairs = new Set();
 
     for (let day = 1; day <= MATCHDAYS; day++) {
       const usedToday = new Set();
-      const dayMatches = [];
-
       const teamList = shuffleArray(teams.map(t => t.name));
+      const dayMatches = [];
 
       for (const teamA of teamList) {
         if (usedToday.has(teamA)) continue;
@@ -125,6 +116,8 @@ function generateDraw() {
         let found = false;
 
         for (const teamB of opponents) {
+          if (teamA === teamB) continue; // HARD FIX
+
           if (usedToday.has(teamB)) continue;
 
           usedToday.add(teamA);
@@ -145,6 +138,9 @@ function generateDraw() {
             home = teamA;
             away = teamB;
           }
+
+          // FINAL SAFETY CHECK (prevents Chelsea vs Chelsea bug)
+          if (home === away) continue;
 
           dayMatches.push({
             id: nextId++,
@@ -179,7 +175,7 @@ function generateDraw() {
   alert("Could not generate a balanced season. Try again.");
 }
 
-/* ---------------- MATCHDAY NAV ---------------- */
+/* ---------------- MATCHDAY ---------------- */
 
 function prevMatchday() {
   if (currentMatchday > 1) {
@@ -247,7 +243,6 @@ function calculateTable() {
     const home = table[f.home];
     const away = table[f.away];
 
-    // real scoring rules
     if (h > a) {
       home.w++; home.pts += 3; away.l++;
     } else if (a > h) {
@@ -268,7 +263,7 @@ function calculateTable() {
   renderTable(sorted);
 }
 
-/* ---------------- TABLE UI ---------------- */
+/* ---------------- TABLE ---------------- */
 
 function renderTable(sorted) {
   const box = document.getElementById("standings");
@@ -296,6 +291,9 @@ function renderTable(sorted) {
   box.innerHTML = html;
 }
 
-/* ---------------- INIT ---------------- */
-
-renderTeamEditor?.();
+/* ---------------- GLOBAL FIX ---------------- */
+// ensures button always works
+window.generateDraw = generateDraw;
+window.calculateTable = calculateTable;
+window.prevMatchday = prevMatchday;
+window.nextMatchday = nextMatchday;
