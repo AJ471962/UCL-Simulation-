@@ -52,8 +52,6 @@ let knockoutStage = null;
 let currentRound = "none";
 let playoffWinners = [];
 let savedKnockout = {};
-// format:
-// { roundName: { matchId: {h, a} } }
 
 /* ---------------- HELPERS ---------------- */
 
@@ -583,24 +581,24 @@ function renderKnockout() {
   let html = `
     <h2>Knockout - ${currentRound}</h2>
 
-    <button onclick="advanceKnockout()">Play Round</button>
-    <button onclick="resetKnockoutRound()">Reset Round</button>
-    <button onclick="calculateKnockoutTable()">Check Winners</button>
+    <button onclick="simulateKnockoutRound()">Simulate</button>
+    <button onclick="saveKnockoutRound()">Save</button>
+    <button onclick="resetKnockoutRound()">Reset</button>
+    <button onclick="prevKnockoutRound()">Previous Round</button>
   `;
 
-  round.forEach((m, i) => {
-
+  round.forEach(m => {
     const saved = savedKnockout[currentRound]?.[m.id];
 
-    const hVal = saved ? saved.h : "";
-    const aVal = saved ? saved.a : "";
+    const h = saved ? saved.h : "";
+    const a = saved ? saved.a : "";
 
     html += `
       <div style="margin:10px 0;">
-        ${m.home} 
-        <input id="kh-${m.id}" type="number" value="${hVal}" style="width:50px;">
+        ${m.home}
+        <input id="kh-${m.id}" type="number" value="${h}" style="width:50px;">
         -
-        <input id="ka-${m.id}" type="number" value="${aVal}" style="width:50px;">
+        <input id="ka-${m.id}" type="number" value="${a}" style="width:50px;">
         ${m.away}
       </div>
     `;
@@ -608,7 +606,7 @@ function renderKnockout() {
 
   box.innerHTML = html;
 }
-
+  
 function saveKnockoutRound() {
   const round =
     currentRound === "playoffs"
@@ -631,15 +629,77 @@ function saveKnockoutRound() {
       a: Number(a.value)
     };
   });
-
-  alert("Knockout saved");
 }
+
 
 function resetKnockoutRound() {
   delete savedKnockout[currentRound];
   renderKnockout();
 }
 
+function simulateKnockoutRound() {
+  const round =
+    currentRound === "playoffs"
+      ? knockoutStage.playoffs
+      : knockoutStage[currentRound];
+
+  const winners = round.map(m => {
+
+    const saved = savedKnockout[currentRound]?.[m.id];
+
+    let h, a;
+
+    if (saved) {
+      h = saved.h;
+      a = saved.a;
+    } else {
+      // SAME logic as league simulation
+      const result = simulateMatch(m.home, m.away);
+
+      if (result === "H") {
+        h = Math.floor(Math.random() * 4) + 1;
+        a = Math.floor(Math.random() * h);
+      } else if (result === "A") {
+        a = Math.floor(Math.random() * 4) + 1;
+        h = Math.floor(Math.random() * a);
+      } else {
+        h = a = Math.floor(Math.random() * 3);
+      }
+    }
+
+    m.score = `${h}-${a}`;
+
+    return h >= a ? m.home : m.away;
+  });
+
+  function advanceKnockoutFromSimulation(winners) {
+  if (currentRound === "playoffs") {
+    knockoutStage.roundOf16 = createPairs(winners);
+    currentRound = "roundOf16";
+  }
+
+  else if (currentRound === "roundOf16") {
+    knockoutStage.quarterFinal = createPairs(winners);
+    currentRound = "quarterFinal";
+  }
+
+  else if (currentRound === "quarterFinal") {
+    knockoutStage.semiFinal = createPairs(winners);
+    currentRound = "semiFinal";
+  }
+
+  else if (currentRound === "semiFinal") {
+    knockoutStage.final = createPairs(winners);
+    currentRound = "final";
+  }
+
+  else if (currentRound === "final") {
+    alert("Champion: " + winners[0]);
+  }
+
+  renderKnockout();
+  }
+  
 function showLeaguePhase() {
   document.getElementById("leaguePhasePage").style.display = "block";
   document.getElementById("knockoutPage").style.display = "none";
