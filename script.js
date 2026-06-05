@@ -48,6 +48,9 @@ let currentMatchday = 1;
 
 let savedResults = {};
 let knockout = null;
+let knockoutStage = null;
+let currentRound = "none";
+let playoffWinners = [];
 
 /* ---------------- HELPERS ---------------- */
 
@@ -387,16 +390,40 @@ function renderTable(sorted) {
   box.innerHTML = html;
 }
 
+function generatePlayoffs(ranked) {
+  const playoffTeams = ranked.slice(8, 24); // 9–24
+
+  const pairs = [];
+
+  // UCL style seeding:
+  // 9 vs 24, 10 vs 23, etc.
+  for (let i = 0; i < 8; i++) {
+    const home = playoffTeams[i];
+    const away = playoffTeams[15 - i];
+
+    pairs.push({
+      id: "p" + i,
+      home,
+      away,
+      leg1: null,
+      leg2: null,
+      winner: null
+    });
+  }
+
+  return pairs;
+}
+
 function generateKnockout() {
   const table = {};
 
   teams.forEach(t => {
-    table[t.name] = { pts: 0, gd: 0 };
+    table[t.name] = { pts: 0, gf: 0, ga: 0 };
   });
 
-  for (const f of fixtures) {
-    const saved = savedResults[f.matchday]?.[f.id];
-    if (!saved) continue;
+  fixtures.forEach(f => {
+    const saved = savedResults?.[f.matchday]?.[f.id];
+    if (!saved) return;
 
     const h = saved.h;
     const a = saved.a;
@@ -407,45 +434,157 @@ function generateKnockout() {
     home.pts += h > a ? 3 : h === a ? 1 : 0;
     away.pts += a > h ? 3 : h === a ? 1 : 0;
 
-    home.gd += (h - a);
-    away.gd += (a - h);
-  }
+    home.gf += h; home.ga += a;
+    away.gf += a; away.ga += h;
+  });
 
   const ranked = Object.entries(table)
     .sort((a, b) =>
       b[1].pts - a[1].pts ||
-      b[1].gd - a[1].gd
+      (b[1].gf - b[1].ga) - (a[1].gf - a[1].ga)
     )
     .map(x => x[0]);
 
-  const top16 = ranked.slice(0, 16);
+  const top8 = ranked.slice(0, 8);
 
-  knockout = {
-    roundOf16: []
+  const playoffs = generatePlayoffs(ranked);
+
+  knockoutStage = {
+    top8,
+    playoffs,
+    roundOf16: [],
+    quarterFinal: [],
+    semiFinal: [],
+    final: []
   };
 
-  for (let i = 0; i < 8; i++) {
-    knockout.roundOf16.push({
+  currentRound = "playoffs";
+
+  renderKnockout();
+
+  alert("Playoffs generated (9–24). Top 8 qualified directly.");
+  }
+
+function playTwoLegTie(match) {
+  const leg1Home = Math.floor(Math.random() * 3);
+  const leg1Away = Math.floor(Math.random() * 3);
+
+  const leg2Home = Math.floor(Math.random() * 3);
+  const leg2Away = Math.floor(Math.random() * 3);
+
+  const teamA = match.home;
+  const teamB = match.away;
+
+  const totalA = leg1Home + leg2Away;
+  const totalB = leg1Away + leg2Home;
+
+  if (totalA === totalB) {
+    // simple extra time coin flip
+    return Math.random() > 0.5 ? teamA : teamB;
+  }
+
+  return totalA > totalB ? teamA : teamB;
+}
+
+function playPlayoffs() {
+  const winners = knockoutStage.playoffs.map(playTwoLegTie);
+
+  playoffWinners = winners;
+
+  const all16 = [...knockoutStage.top8, ...winners];
+
+  knockoutStage.roundOf16 = createPairs(all16);
+
+  currentRound = "roundOf16";
+
+  renderKnockout();
+}
+
+function createPairs(list) {
+  const pairs = [];
+
+  for (let i = 0; i < list.length; i += 2) {
+    pairs.push({
       id: i,
-      home: top16[i],
-      away: top16[15 - i],
+      home: list[i],
+      away: list[i + 1],
+      score: null,
       winner: null
     });
   }
 
-  alert("Knockout Round of 16 generated!");
-                }
+  return pairs;
+}
 
-function playKO(match) {
-  let h = Math.floor(Math.random() * 4);
-  let a = Math.floor(Math.random() * 4);
+function advanceKnockout() {
+  if (currentRound === "playoffs") {
+    playPlayoffs();
+    return;
+  }
 
-  if (h === a) return playKO(match);
+  const round = knockoutStage[currentRound];
 
-  match.winner = h > a ? match.home : match.away;
+  const winners = round.map(m => {
+    const h = Math.floor(Math.random() * 4);
+    const a = Math.floor(Math.random() * 4);
 
-  return match.winner;
+    m.score = `${h}-${a}`;
+    m.winner = h >= a ? m.home : m.away;
+
+    return m.winner;
+  });
+
+  if (currentRound === "roundOf16") {
+    knockoutStage.quarterFinal = createPairs(winners);
+    currentRound = "quarterFinal";
+  }
+
+  else if (currentRound === "quarterFinal") {
+    knockoutStage.semiFinal = createPairs(winners);
+    currentRound = "semiFinal";
+  }
+
+  else if (currentRound === "semiFinal") {
+    knockoutStage.final = createPairs(winners);
+    currentRound = "final";
+  }
+
+  else if (currentRound === "final") {
+    alert("🏆 Champion: " + winners[0]);
+  }
+
+  renderKnockout();
+}
+
+function renderKnockout() {
+  const box = document.getElementById("fixtures");
+
+  if (!knockoutStage) return;
+
+  let roundData =
+    currentRound === "playoffs" ? knockoutStage.playoffs :
+    knockoutStage[currentRound];
+
+  let html = `
+    <h2>Knockout Stage - ${currentRound}</h2>
+    <button onclick="advanceKnockout()">Play Round</button>
+  `;
+
+  roundData.forEach(m => {
+    if (currentRound === "playoffs") {
+      html += `<div>${m.home} vs ${m.away}</div>`;
+    } else {
+      html += `
+        <div>
+          ${m.home} vs ${m.away}
+          ${m.score ? " → " + m.score : ""}
+        </div>
+      `;
     }
+  });
+
+  box.innerHTML = html;
+}
 
 function showLeaguePhase() {
   document.getElementById("leaguePhasePage").style.display = "block";
@@ -467,3 +606,5 @@ window.saveMatchday = saveMatchday;
 window.resetMatchday = resetMatchday;
 window.showLeaguePhase = showLeaguePhase;
 window.showKnockout = showKnockout;
+window.generateKnockout = generateKnockout;
+window.advanceKnockout = advanceKnockout;
