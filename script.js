@@ -114,6 +114,166 @@ delete savedResults[currentMatchday];
 renderFixtures();
 }
 
+let knockout = {
+  roundOf16: [],
+  quarterFinals: [],
+  semiFinals: [],
+  final: []
+};
+
+function getFinalStandings() {
+  const table = {};
+
+  teams.forEach(t => {
+    table[t.name] = { pts: 0, gd: 0 };
+  });
+
+  for (const f of fixtures) {
+    const saved = savedResults[f.matchday]?.[f.id];
+    if (!saved) continue;
+
+    const h = saved.h;
+    const a = saved.a;
+
+    const home = table[f.home];
+    const away = table[f.away];
+
+    home.pts += h > a ? 3 : h === a ? 1 : 0;
+    away.pts += a > h ? 3 : h === a ? 1 : 0;
+
+    home.gd += (h - a);
+    away.gd += (a - h);
+  }
+
+  return Object.entries(table).sort((a,b) =>
+    b[1].pts - a[1].pts || b[1].gd - a[1].gd
+  );
+}
+
+function generateRoundOf16() {
+  const standings = getFinalStandings();
+
+  const seeded = standings.slice(0, 16).map(t => t[0]);
+
+  const matches = [];
+
+  for (let i = 0; i < 8; i++) {
+    matches.push({
+      id: `r16-${i}`,
+      home: seeded[i],
+      away: seeded[15 - i],
+      homeScore: null,
+      awayScore: null
+    });
+  }
+
+  knockout.roundOf16 = matches;
+  renderKnockout("roundOf16");
+}
+
+function playKnockoutMatch(match) {
+  const h = Math.floor(Math.random() * 4);
+  const a = Math.floor(Math.random() * 4);
+
+  if (h === a) return playKnockoutMatch(match); // no draws
+
+  return {
+    winner: h > a ? match.home : match.away,
+    score: `${h}-${a}`
+  };
+    }
+
+function playRoundOf16() {
+  const winners = [];
+
+  knockout.roundOf16.forEach(m => {
+    const result = playKnockoutMatch(m);
+    winners.push(result.winner);
+  });
+
+  knockout.quarterFinals = [];
+
+  for (let i = 0; i < 4; i++) {
+    knockout.quarterFinals.push({
+      id: `qf-${i}`,
+      home: winners[i],
+      away: winners[winners.length - 1 - i]
+    });
+  }
+
+  renderKnockout("quarterFinals");
+}
+
+function playQuarterFinals() {
+  const winners = [];
+
+  knockout.quarterFinals.forEach(m => {
+    const result = playKnockoutMatch(m);
+    winners.push(result.winner);
+  });
+
+  knockout.semiFinals = [];
+
+  for (let i = 0; i < 2; i++) {
+    knockout.semiFinals.push({
+      id: `sf-${i}`,
+      home: winners[i],
+      away: winners[winners.length - 1 - i]
+    });
+  }
+
+  renderKnockout("semiFinals");
+}
+
+      function playSemiFinals() {
+  const winners = [];
+
+  knockout.semiFinals.forEach(m => {
+    const result = playKnockoutMatch(m);
+    winners.push(result.winner);
+  });
+
+  knockout.final = [{
+    id: "final",
+    home: winners[0],
+    away: winners[1]
+  }];
+
+  renderKnockout("final");
+      }
+
+function playFinal() {
+  const result = playKnockoutMatch(knockout.final[0]);
+
+  alert(`🏆 CHAMPION: ${result.winner} (${result.score})`);
+}
+
+function renderKnockout(stage) {
+  const box = document.getElementById("knockout");
+
+  let matches = knockout[stage];
+
+  let html = `<h2>${stage}</h2>`;
+
+  matches.forEach(m => {
+    html += `
+      <div>
+        ${m.home} vs ${m.away}
+        <button onclick="playKnockoutMatchUI('${stage}', '${m.id}')">Play</button>
+      </div>
+    `;
+  });
+
+  box.innerHTML = html;
+}
+
+    function playKnockoutMatchUI(stage, id) {
+  const match = knockout[stage].find(m => m.id === id);
+
+  const result = playKnockoutMatch(match);
+
+  alert(`${result.winner} wins ${result.score}`);
+    }
 /* ---------------- AUTO FILL ---------------- */
 
 function autoFillResults() {
