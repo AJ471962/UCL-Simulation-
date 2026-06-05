@@ -1,7 +1,7 @@
 const DEFAULT_TEAMS = [
   { name: "Real Madrid", pot: 1 },
   { name: "Manchester City", pot: 1 },
-  { name: "Paris PSG", pot: 1 },
+  { name: "PSG", pot: 1 },
   { name: "Bayern Munich", pot: 1 },
   { name: "Inter Milan", pot: 1 },
   { name: "Arsenal", pot: 1 },
@@ -65,7 +65,7 @@ function shuffleArray(arr) {
   return copy;
 }
 
-/* ---------------- REALISTIC SIM ---------------- */
+/* ---------------- SIM ---------------- */
 
 function simulateMatch(home, away) {
   const hPot = getPot(home);
@@ -118,6 +118,7 @@ function autoFillResults() {
 
 function generateDraw() {
   fixtures = [];
+  currentMatchday = 1; // 🔴 IMPORTANT RESET
 
   const maxAttempts = 80;
 
@@ -138,19 +139,16 @@ function generateDraw() {
         if (usedToday.has(teamA)) continue;
 
         const opponents = shuffleArray(
-          teams
-            .map(t => t.name)
-            .filter(op =>
-              op !== teamA &&
-              !usedToday.has(op) &&
-              !usedPairs.has(pairKey(teamA, op))
-            )
+          teams.map(t => t.name).filter(op =>
+            op !== teamA &&
+            !usedToday.has(op) &&
+            !usedPairs.has(pairKey(teamA, op))
+          )
         );
 
         let found = false;
 
         for (const teamB of opponents) {
-
           if (usedToday.has(teamB)) continue;
 
           usedToday.add(teamA);
@@ -167,8 +165,6 @@ function generateDraw() {
             away = teamA;
           }
 
-          if (home === away) continue;
-
           dayMatches.push({
             id: nextId++,
             matchday: day,
@@ -180,7 +176,7 @@ function generateDraw() {
           break;
         }
 
-        if (!found && usedToday.size < teams.length) {
+        if (!found) {
           success = false;
           break;
         }
@@ -193,29 +189,12 @@ function generateDraw() {
 
     if (success && season.length === 144) {
       fixtures = season;
-      currentMatchday = 1;
       renderFixtures();
       return;
     }
   }
 
   alert("Could not generate a balanced season. Try again.");
-}
-
-/* ---------------- MATCHDAY ---------------- */
-
-function prevMatchday() {
-  if (currentMatchday > 1) {
-    currentMatchday--;
-    renderFixtures();
-  }
-}
-
-function nextMatchday() {
-  if (currentMatchday < MATCHDAYS) {
-    currentMatchday++;
-    renderFixtures();
-  }
 }
 
 /* ---------------- FIXTURES ---------------- */
@@ -237,9 +216,9 @@ function renderFixtures() {
     html += `
       <div style="margin:8px 0;">
         ${f.home}
-        <input id="hg-${f.id}" type="number" style="width:50px;">
+        <input id="hg-${f.id}" type="number" value="" style="width:50px;">
         -
-        <input id="ag-${f.id}" type="number" style="width:50px;">
+        <input id="ag-${f.id}" type="number" value="" style="width:50px;">
         ${f.away}
       </div>
     `;
@@ -249,7 +228,7 @@ function renderFixtures() {
   box.innerHTML = html;
 }
 
-/* ---------------- TABLE (FIXED CORE ISSUE) ---------------- */
+/* ---------------- TABLE (FIXED) ---------------- */
 
 function calculateTable() {
   const table = {};
@@ -267,7 +246,7 @@ function calculateTable() {
     const hgRaw = hgEl.value;
     const agRaw = agEl.value;
 
-    // 🔴 CRITICAL FIX: ignore unplayed matches completely
+    // 🔴 STRICT CHECK: ignore unplayed matches
     if (hgRaw === "" || agRaw === "") return;
 
     const h = Number(hgRaw);
@@ -285,16 +264,12 @@ function calculateTable() {
     away.ga += h;
 
     if (h > a) {
-      home.w++; home.pts += 3;
-      away.l++;
+      home.w++; home.pts += 3; away.l++;
     } else if (a > h) {
-      away.w++; away.pts += 3;
-      home.l++;
+      away.w++; away.pts += 3; home.l++;
     } else {
-      home.d++;
-      away.d++;
-      home.pts += 1;
-      away.pts += 1;
+      home.d++; away.d++;
+      home.pts++; away.pts++;
     }
   });
 
@@ -306,7 +281,7 @@ function calculateTable() {
   renderTable(sorted);
 }
 
-/* ---------------- TABLE RENDER ---------------- */
+/* ---------------- TABLE UI ---------------- */
 
 function renderTable(sorted) {
   const box = document.getElementById("standings");
@@ -334,7 +309,7 @@ function renderTable(sorted) {
   box.innerHTML = html;
 }
 
-/* ---------------- GLOBAL EXPORTS ---------------- */
+/* ---------------- GLOBAL ---------------- */
 
 window.autoFillResults = autoFillResults;
 window.generateDraw = generateDraw;
