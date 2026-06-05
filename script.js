@@ -81,10 +81,10 @@ function simulateMatch(home, away) {
   return "D";
 }
 
-/* ---------------- AUTO FILL FIX (GLOBAL SAFE) ---------------- */
+/* ---------------- AUTO FILL ---------------- */
 
 function autoFillResults() {
-  if (!fixtures || fixtures.length === 0) {
+  if (!fixtures.length) {
     alert("No fixtures generated yet.");
     return;
   }
@@ -114,7 +114,7 @@ function autoFillResults() {
   });
 }
 
-/* ---------------- DRAW (SAFE VERSION) ---------------- */
+/* ---------------- DRAW ---------------- */
 
 function generateDraw() {
   fixtures = [];
@@ -249,7 +249,7 @@ function renderFixtures() {
   box.innerHTML = html;
 }
 
-/* ---------------- TABLE ---------------- */
+/* ---------------- TABLE (FIXED CORE ISSUE) ---------------- */
 
 function calculateTable() {
   const table = {};
@@ -259,38 +259,54 @@ function calculateTable() {
   });
 
   fixtures.forEach(f => {
-    const hg = document.getElementById(`hg-${f.id}`)?.value;
-    const ag = document.getElementById(`ag-${f.id}`)?.value;
+    const hgEl = document.getElementById(`hg-${f.id}`);
+    const agEl = document.getElementById(`ag-${f.id}`);
 
-    if (hg === "" || ag === "") return;
+    if (!hgEl || !agEl) return;
 
-    const h = Number(hg);
-    const a = Number(ag);
+    const hgRaw = hgEl.value;
+    const agRaw = agEl.value;
+
+    // 🔴 CRITICAL FIX: ignore unplayed matches completely
+    if (hgRaw === "" || agRaw === "") return;
+
+    const h = Number(hgRaw);
+    const a = Number(agRaw);
+
+    if (Number.isNaN(h) || Number.isNaN(a)) return;
 
     const home = table[f.home];
     const away = table[f.away];
 
-    if (h > a) {
-      home.w++; home.pts += 3; away.l++;
-    } else if (a > h) {
-      away.w++; away.pts += 3; home.l++;
-    } else {
-      home.d++; away.d++;
-      home.pts++; away.pts++;
-    }
+    home.gf += h;
+    home.ga += a;
 
-    home.gf += h; home.ga += a;
-    away.gf += a; away.ga += h;
+    away.gf += a;
+    away.ga += h;
+
+    if (h > a) {
+      home.w++; home.pts += 3;
+      away.l++;
+    } else if (a > h) {
+      away.w++; away.pts += 3;
+      home.l++;
+    } else {
+      home.d++;
+      away.d++;
+      home.pts += 1;
+      away.pts += 1;
+    }
   });
 
-  const sorted = Object.entries(table).sort((a,b) =>
-    b[1].pts - a[1].pts || (b[1].gf-b[1].ga) - (a[1].gf-a[1].ga)
+  const sorted = Object.entries(table).sort((a, b) =>
+    b[1].pts - a[1].pts ||
+    (b[1].gf - b[1].ga) - (a[1].gf - a[1].ga)
   );
 
   renderTable(sorted);
 }
 
-/* ---------------- TABLE ---------------- */
+/* ---------------- TABLE RENDER ---------------- */
 
 function renderTable(sorted) {
   const box = document.getElementById("standings");
@@ -318,8 +334,8 @@ function renderTable(sorted) {
   box.innerHTML = html;
 }
 
-/* ---------------- FIX FOR YOUR ERROR ---------------- */
-// ensures browser always sees the function
+/* ---------------- GLOBAL EXPORTS ---------------- */
+
 window.autoFillResults = autoFillResults;
 window.generateDraw = generateDraw;
 window.calculateTable = calculateTable;
