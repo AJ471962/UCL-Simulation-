@@ -47,6 +47,7 @@ let fixtures = [];
 let currentMatchday = 1;
 
 let savedResults = {};
+let knockout = null;
 
 /* ---------------- HELPERS ---------------- */
 
@@ -386,6 +387,65 @@ function renderTable(sorted) {
   box.innerHTML = html;
 }
 
+function generateKnockout() {
+  const table = {};
+
+  teams.forEach(t => {
+    table[t.name] = { pts: 0, gd: 0 };
+  });
+
+  for (const f of fixtures) {
+    const saved = savedResults[f.matchday]?.[f.id];
+    if (!saved) continue;
+
+    const h = saved.h;
+    const a = saved.a;
+
+    const home = table[f.home];
+    const away = table[f.away];
+
+    home.pts += h > a ? 3 : h === a ? 1 : 0;
+    away.pts += a > h ? 3 : h === a ? 1 : 0;
+
+    home.gd += (h - a);
+    away.gd += (a - h);
+  }
+
+  const ranked = Object.entries(table)
+    .sort((a, b) =>
+      b[1].pts - a[1].pts ||
+      b[1].gd - a[1].gd
+    )
+    .map(x => x[0]);
+
+  const top16 = ranked.slice(0, 16);
+
+  knockout = {
+    roundOf16: []
+  };
+
+  for (let i = 0; i < 8; i++) {
+    knockout.roundOf16.push({
+      id: i,
+      home: top16[i],
+      away: top16[15 - i],
+      winner: null
+    });
+  }
+
+  alert("Knockout Round of 16 generated!");
+                }
+
+function playKO(match) {
+  let h = Math.floor(Math.random() * 4);
+  let a = Math.floor(Math.random() * 4);
+
+  if (h === a) return playKO(match);
+
+  match.winner = h > a ? match.home : match.away;
+
+  return match.winner;
+    }
 /* ---------------- GLOBAL ---------------- */
 
 window.autoFillResults = autoFillResults;
