@@ -53,7 +53,7 @@ return teams.find(t => t.name === team)?.pot ?? 4;
 }
 
 function pairKey(a, b) {
-return a < b ? `${a}__${b}` : `${b}__${a}`;
+return a < b ? ${a}${b} : ${b}${a};
 }
 
 function shuffleArray(arr) {
@@ -63,22 +63,6 @@ const j = Math.floor(Math.random() * (i + 1));
 [copy[i], copy[j]] = [copy[j], copy[i]];
 }
 return copy;
-}
-
-/* ---------------- MATCHDAY CONTROLS (MISSING FIX) ---------------- */
-
-function prevMatchday() {
-if (currentMatchday > 1) {
-currentMatchday--;
-renderFixtures();
-}
-}
-
-function nextMatchday() {
-if (currentMatchday < MATCHDAYS) {
-currentMatchday++;
-renderFixtures();
-}
 }
 
 /* ---------------- SIM ---------------- */
@@ -97,7 +81,7 @@ if (awayScore > homeScore + 0.18) return "A";
 return "D";
 }
 
-/* ---------------- FIXED AUTO FILL ---------------- */
+/* ---------------- AUTO FILL ---------------- */
 
 function autoFillResults() {
 if (!fixtures.length) {
@@ -122,11 +106,12 @@ h = Math.floor(Math.random() * a);
 h = a = Math.floor(Math.random() * 3);
 }
 
-const hg = document.getElementById(`hg-${f.id}`);
-const ag = document.getElementById(`ag-${f.id}`);
+const hg = document.getElementById(hg-${f.id});
+const ag = document.getElementById(ag-${f.id});
 
 if (hg) hg.value = h;
 if (ag) ag.value = a;
+
 });
 }
 
@@ -134,7 +119,7 @@ if (ag) ag.value = a;
 
 function generateDraw() {
 fixtures = [];
-currentMatchday = 1;
+currentMatchday = 1; // 🔴 IMPORTANT RESET
 
 const maxAttempts = 80;
 
@@ -154,48 +139,49 @@ const dayMatches = [];
 for (const teamA of teamList) {
 if (usedToday.has(teamA)) continue;
 
-const opponents = shuffleArray(
-teams.map(t => t.name).filter(op =>
-op !== teamA &&
-!usedToday.has(op) &&
-!usedPairs.has(pairKey(teamA, op))
-)
-);
+const opponents = shuffleArray(    
+  teams.map(t => t.name).filter(op =>    
+    op !== teamA &&    
+    !usedToday.has(op) &&    
+    !usedPairs.has(pairKey(teamA, op))    
+  )    
+);    
 
-let found = false;
+let found = false;    
 
-for (const teamB of opponents) {
-if (usedToday.has(teamB)) continue;
+for (const teamB of opponents) {    
+  if (usedToday.has(teamB)) continue;    
 
-usedToday.add(teamA);
-usedToday.add(teamB);
-usedPairs.add(pairKey(teamA, teamB));
+  usedToday.add(teamA);    
+  usedToday.add(teamB);    
+  usedPairs.add(pairKey(teamA, teamB));    
 
-const result = simulateMatch(teamA, teamB);
+  const result = simulateMatch(teamA, teamB);    
 
-let home = teamA;
-let away = teamB;
+  let home = teamA;    
+  let away = teamB;    
 
-if (result === "A") {
-home = teamB;
-away = teamA;
+  if (result === "A") {    
+    home = teamB;    
+    away = teamA;    
+  }    
+
+  dayMatches.push({    
+    id: nextId++,    
+    matchday: day,    
+    home,    
+    away    
+  });    
+
+  found = true;    
+  break;    
+}    
+
+if (!found) {    
+  success = false;    
+  break;    
 }
 
-dayMatches.push({
-id: nextId++,
-matchday: day,
-home,
-away
-});
-
-found = true;
-break;
-}
-
-if (!found) {
-success = false;
-break;
-}
 }
 
 if (!success) break;
@@ -208,12 +194,13 @@ fixtures = season;
 renderFixtures();
 return;
 }
+
 }
 
 alert("Could not generate a balanced season. Try again.");
 }
 
-/* ---------------- FIXED RENDER ---------------- */
+/* ---------------- FIXTURES ---------------- */
 
 function renderFixtures() {
 const box = document.getElementById("fixtures");
@@ -221,30 +208,17 @@ if (!box) return;
 
 const dayFixtures = fixtures.filter(f => f.matchday === currentMatchday);
 
-let html = `
-<div style="margin:16px; padding:12px; background:#1b1b1b; border-radius:10px;">
-<button onclick="prevMatchday()">Prev</button>
-<b style="margin:0 10px;">Matchday ${currentMatchday}</b>
-<button onclick="nextMatchday()">Next</button>
-`;
+let html =   <div style="margin:16px; padding:12px; background:#1b1b1b; border-radius:10px;">   <button onclick="prevMatchday()">Prev</button>   <b style="margin:0 10px;">Matchday ${currentMatchday}</b>   <button onclick="nextMatchday()">Next</button>  ;
 
 dayFixtures.forEach(f => {
-html += `
-<div style="margin:8px 0;">
-${f.home}
-<input id="hg-${f.id}" type="number" style="width:50px;">
--
-<input id="ag-${f.id}" type="number" style="width:50px;">
-${f.away}
-</div>
-`;
+html +=   <div style="margin:8px 0;">   ${f.home}   <input id="hg-${f.id}" type="number" value="" style="width:50px;">   -   <input id="ag-${f.id}" type="number" value="" style="width:50px;">   ${f.away}   </div>  ;
 });
 
-html += `</div>`;
+html += </div>;
 box.innerHTML = html;
 }
 
-/* ---------------- TABLE ---------------- */
+/* ---------------- TABLE (FIXED) ---------------- */
 
 function calculateTable() {
 const table = {};
@@ -254,18 +228,21 @@ table[t.name] = { pts: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0 };
 });
 
 fixtures.forEach(f => {
-const hgEl = document.getElementById(`hg-${f.id}`);
-const agEl = document.getElementById(`ag-${f.id}`);
+const hgEl = document.getElementById(hg-${f.id});
+const agEl = document.getElementById(ag-${f.id});
 
 if (!hgEl || !agEl) return;
 
-const hg = hgEl.value;
-const ag = agEl.value;
+const hgRaw = hgEl.value;
+const agRaw = agEl.value;
 
-if (hg === "" || ag === "") return;
+// 🔴 STRICT CHECK: ignore unplayed matches
+if (hgRaw === "" || agRaw === "") return;
 
-const h = Number(hg);
-const a = Number(ag);
+const h = Number(hgRaw);
+const a = Number(agRaw);
+
+if (Number.isNaN(h) || Number.isNaN(a)) return;
 
 const home = table[f.home];
 const away = table[f.away];
@@ -284,6 +261,7 @@ away.w++; away.pts += 3; home.l++;
 home.d++; away.d++;
 home.pts++; away.pts++;
 }
+
 });
 
 const sorted = Object.entries(table).sort((a, b) =>
@@ -309,20 +287,20 @@ if (i < 8) style = "background:green;color:white;";
 else if (i < 24) style = "background:gold;color:black;";
 
 html += `<tr style="${style}">
-<td>${i + 1}</td>
-<td>${name}</td>
-<td>${s.pts}</td>
-<td>${s.w}</td>
-<td>${s.d}</td>
-<td>${s.l}</td>
-</tr>`;
-});
+
+  <td>${i + 1}</td>    
+  <td>${name}</td>    
+  <td>${s.pts}</td>    
+  <td>${s.w}</td>    
+  <td>${s.d}</td>    
+  <td>${s.l}</td>    
+</tr>`;  });
 
 html += "</table>";
 box.innerHTML = html;
 }
 
-/* ---------------- EXPORTS ---------------- */
+/* ---------------- GLOBAL ---------------- */
 
 window.autoFillResults = autoFillResults;
 window.generateDraw = generateDraw;
