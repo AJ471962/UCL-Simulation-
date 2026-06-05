@@ -446,6 +446,16 @@ function playKO(match) {
 
   return match.winner;
     }
+
+function showLeaguePhase() {
+  document.getElementById("leaguePhasePage").style.display = "block";
+  document.getElementById("knockoutPage").style.display = "none";
+}
+
+function showKnockout() {
+  document.getElementById("leaguePhasePage").style.display = "none";
+  document.getElementById("knockoutPage").style.display = "block";
+}
 /* ---------------- GLOBAL ---------------- */
 
 window.autoFillResults = autoFillResults;
@@ -455,3 +465,5 @@ window.prevMatchday = prevMatchday;
 window.nextMatchday = nextMatchday;
 window.saveMatchday = saveMatchday;
 window.resetMatchday = resetMatchday;
+window.showLeaguePhase = showLeaguePhase;
+window.showKnockout = showKnockout;
