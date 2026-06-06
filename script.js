@@ -313,7 +313,7 @@ function saveSeason() {
 
   name = name.trim();
   if (!name) {
-    alert("Season name cannot be empty.");
+    showModal("Season name cannot be empty.");
     return;
   }
 
@@ -360,7 +360,7 @@ function renameSeason(id) {
 
 function renameCurrentSeason() {
   if (!currentSeasonId) {
-    alert("No current saved season is selected.");
+    showModal("No current saved season is selected.");
     return;
   }
 
@@ -372,11 +372,14 @@ function deleteSeason(id) {
   const entry = seasons.find(s => s.id === id);
 
   if (!entry) {
-    alert("Season not found.");
+    showModal("Season not found.");
     return;
   }
 
-  if (!confirm(`Delete season "${entry.name}"?`)) return;
+  showModal("Delete season?", [
+  { text: "Cancel" },
+  { text: "Delete", onClick: deleteSeason }
+]);
 
   const updated = seasons.filter(s => s.id !== id);
   saveSavedSeasons(updated);
@@ -390,7 +393,7 @@ function deleteSeason(id) {
 
 function deleteCurrentSeason() {
   if (!currentSeasonId) {
-    alert("No current saved season is selected.");
+    showModal("No current saved season is selected.");
     return;
   }
 
@@ -401,7 +404,7 @@ function loadSeason(id) {
   const entry = getSavedSeasonById(id);
 
   if (!entry) {
-    alert("Season not found.");
+    showModal("Season not found.");
     return;
   }
 
@@ -435,8 +438,10 @@ function loadAdjacentSeason(step) {
 }
 
 function resetSeason() {
-  if (!confirm("Reset the current season results? Fixtures will stay in place.")) {
-    return;
+  showModal("Reset the current season results? Fixtures will stay in place.", [
+  { text: "Cancel" },
+  { text: "Reset", onClick: resetSeason }
+]);
   }
 
   savedResults = {};
@@ -1037,8 +1042,9 @@ function generateKnockout() {
   const rankings = computeLeagueStandings();
 
   if (!rankings.length || rankings.every(([, s]) => s.mp === 0)) {
-    alert("Save some league results first.");
-    return;
+    showModal("Save some league results first.", [
+  { text: "OK" }
+]);
   }
 
   const rankedTeams = rankings.map(x => x[0]);
@@ -1094,7 +1100,7 @@ function advanceKnockoutRound() {
     currentRound = "final";
   } else if (currentRound === "final") {
     knockoutState.champion = winners[0];
-    alert(`🏆 Champion: ${winners[0]}`);
+    showModal(`🏆 Champion: ${winners[0]}`);
     renderKnockout();
     return;
   }
@@ -1107,8 +1113,9 @@ function prevKnockoutRound() {
 
   const idx = KO_ROUNDS.indexOf(currentRound);
   if (idx <= 0) {
-    alert("This is the first knockout round.");
-    return;
+    showModal(`🏆 Champion: ${winners[0]}`, [
+  { text: "Congratulations" }
+]);
   }
 
   currentRound = KO_ROUNDS[idx - 1];
