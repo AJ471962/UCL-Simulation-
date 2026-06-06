@@ -332,24 +332,3 @@ button[onclick*="advance"]:not(:disabled) {
     padding: 9px 12px;
   }
 }
-
-/* Default table text */
-table td {
-  color: #ffffff;
-}
-
-/* Ensure team names stay readable even with logos */
-table td.team-name {
-  color: #ffffff;
-  font-weight: 500;
-}
-
-/* Top 8 (green background) */
-table tr.top8 td {
-  color: #ffffff;
-}
-
-/* 9–24 (gold background) */
-table tr.europa td {
-  color: #ffffff;
-}
