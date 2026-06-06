@@ -1,3 +1,48 @@
+const TEAM_LOGOS = {
+  "Arsenal": "england_arsenal_256x256.football-logos.cc.png",
+  "Aston Villa": "england_aston-villa_256x256.football-logos.cc.png",
+  "Chelsea": "england_chelsea_256x256.football-logos.cc.png",
+  "Liverpool": "england_liverpool_256x256.football-logos.cc.png",
+  "Manchester City": "england_manchester-city_256x256.football-logos.cc.png",
+  "Manchester United": "england_manchester-united_256x256.football-logos.cc.png",
+
+  "Barcelona": "spain_barcelona_256x256.football-logos.cc.png",
+  "Real Madrid": "spain_real-madrid_256x256.football-logos.cc.png",
+  "Atletico Madrid": "spain_atletico-madrid_256x256.football-logos.cc.png",
+  "Real Betis": "spain_real-betis_256x256.football-logos.cc.png",
+  "Villarreal": "spain_villarreal_256x256.football-logos.cc.png",
+
+  "Bayern Munich": "germany_bayern-munchen_256x256.football-logos.cc.png",
+  "Borussia Dortmund": "germany_borussia-dortmund_256x256.football-logos.cc.png",
+  "Bayer Leverkusen": "germany_bayer-leverkusen_256x256.football-logos.cc.png",
+  "RB Leipzig": "germany_rb-leipzig_256x256.football-logos.cc.png",
+  "Union Berlin": "germany_union-berlin_256x256.football-logos.cc.png",
+  "Stuttgart": "germany_vfb-stuttgart_256x256.football-logos.cc.png",
+
+  "PSG": "france_paris-saint-germain_256x256.football-logos.cc.png",
+  "Lille": "france_lille_256x256.football-logos.cc.png",
+
+  "Inter Milan": "italy_inter_256x256.football-logos.cc.png",
+  "AC Milan": "italy_ac-milan_256x256.football-logos.cc.png",
+  "Napoli": "italy_napoli_256x256.football-logos.cc.png",
+  "Juventus": "italy_juventus_256x256.football-logos.cc.png",
+  "Lazio": "italy_lazio_256x256.football-logos.cc.png",
+  "Roma": "italy_roma_256x256.football-logos.cc.png",
+
+  "Porto": "portugal_fc-porto_256x256.football-logos.cc.png",
+  "Benfica": "portugal_benfica_256x256.football-logos.cc.png",
+  "Sporting CP": "portugal_sporting-cp_256x256.football-logos.cc.png",
+  "Braga": "portugal_sc-braga_256x256.football-logos.cc.png",
+
+  "Celtic": "scotland_celtic_256x256.football-logos.cc.png",
+  "Olympiacos": "greece_olympiacos_256x256.football-logos.cc.png",
+  "Dinamo Zagreb": "croatia_dinamo-zagreb_256x256.football-logos.cc.png",
+  "Shakhtar Donetsk": "ukraine_shakhtar_256x256.football-logos.cc.png",
+  "Galatasaray": "turkey_galatasaray_256x256.football-logos.cc.png",
+  "RB Salzburg": "austria_salzburg_256x256.football-logos.cc.png",
+  "Feyenoord": "netherlands_feyenoord_256x256.football-logos.cc.png"
+};
+
 const DEFAULT_TEAMS = [
   { name: "Real Madrid", pot: 1, logo: "spain_real-madrid_256x256.football-logos.cc.png" },
   { name: "Manchester City", pot: 1, logo: "england_manchester-city_256x256.football-logos.cc.png" },
@@ -65,6 +110,10 @@ let currentSeasonId = null;
 
 function getLogo(teamName) {
   return `logos/${teamName.toLowerCase().replace(/ /g, "-")}.png`;
+}
+
+function getLogo(teamName) {
+  return TEAM_LOGOS[teamName] || "";
 }
 
 function cloneData(value) {
