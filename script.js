@@ -313,7 +313,7 @@ function saveSeason() {
 
   name = name.trim();
   if (!name) {
-    showModal("Season name cannot be empty.");
+    alert("Season name cannot be empty.");
     return;
   }
 
@@ -360,7 +360,7 @@ function renameSeason(id) {
 
 function renameCurrentSeason() {
   if (!currentSeasonId) {
-    showModal("No current saved season is selected.");
+    alert("No current saved season is selected.");
     return;
   }
 
@@ -372,14 +372,11 @@ function deleteSeason(id) {
   const entry = seasons.find(s => s.id === id);
 
   if (!entry) {
-    showModal("Season not found.");
+    alert("Season not found.");
     return;
   }
 
-  showModal("Delete season?", [
-  { text: "Cancel" },
-  { text: "Delete", onClick: deleteSeason }
-]);
+  if (!confirm(`Delete season "${entry.name}"?`)) return;
 
   const updated = seasons.filter(s => s.id !== id);
   saveSavedSeasons(updated);
@@ -393,7 +390,7 @@ function deleteSeason(id) {
 
 function deleteCurrentSeason() {
   if (!currentSeasonId) {
-    showModal("No current saved season is selected.");
+    alert("No current saved season is selected.");
     return;
   }
 
@@ -404,7 +401,7 @@ function loadSeason(id) {
   const entry = getSavedSeasonById(id);
 
   if (!entry) {
-    showModal("Season not found.");
+    alert("Season not found.");
     return;
   }
 
@@ -438,10 +435,8 @@ function loadAdjacentSeason(step) {
 }
 
 function resetSeason() {
-  showModal("Reset the current season results? Fixtures will stay in place.", [
-  { text: "Cancel" },
-  { text: "Reset", onClick: resetSeason }
-]);
+  if (!confirm("Reset the current season results? Fixtures will stay in place.")) {
+    return;
   }
 
   savedResults = {};
@@ -1042,9 +1037,8 @@ function generateKnockout() {
   const rankings = computeLeagueStandings();
 
   if (!rankings.length || rankings.every(([, s]) => s.mp === 0)) {
-    showModal("Save some league results first.", [
-  { text: "OK" }
-]);
+    alert("Save some league results first.");
+    return;
   }
 
   const rankedTeams = rankings.map(x => x[0]);
@@ -1100,7 +1094,7 @@ function advanceKnockoutRound() {
     currentRound = "final";
   } else if (currentRound === "final") {
     knockoutState.champion = winners[0];
-    showModal(`🏆 Champion: ${winners[0]}`);
+    alert(`🏆 Champion: ${winners[0]}`);
     renderKnockout();
     return;
   }
@@ -1113,9 +1107,8 @@ function prevKnockoutRound() {
 
   const idx = KO_ROUNDS.indexOf(currentRound);
   if (idx <= 0) {
-    showModal(`🏆 Champion: ${winners[0]}`, [
-  { text: "Congratulations" }
-]);
+    alert("This is the first knockout round.");
+    return;
   }
 
   currentRound = KO_ROUNDS[idx - 1];
@@ -1243,27 +1236,6 @@ function renderKnockout() {
 
   html += `</div>`;
   box.innerHTML = html;
-}
-
-function showModal(message, buttons = []) {
-  const overlay = document.getElementById("modalOverlay");
-  const text = document.getElementById("modalText");
-  const btnBox = document.getElementById("modalButtons");
-
-  text.textContent = message;
-  btnBox.innerHTML = "";
-
-  buttons.forEach(btn => {
-    const b = document.createElement("button");
-    b.textContent = btn.text;
-    b.onclick = () => {
-      overlay.style.display = "none";
-      btn.onClick?.();
-    };
-    btnBox.appendChild(b);
-  });
-
-  overlay.style.display = "flex";
 }
 
 /* ---------------- GLOBAL EXPORTS ---------------- */
