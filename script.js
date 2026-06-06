@@ -27,7 +27,7 @@ const DEFAULT_TEAMS = [
   { name: "Lille", pot: 3, logo: "france_lille_256x256.football-logos.cc.png" },
   { name: "Sporting CP", pot: 3, logo: "portugal_sporting-cp_256x256.football-logos.cc.png" },
 
-  { name: "AC Milan", pot: 3 },
+  { name: "AC Milan", pot: 3, logo: "italy_milan_256x256.football-logos.cc.png" },
 
   { name: "Juventus", pot: 3, logo: "italy_juventus_256x256.football-logos.cc.png" },
 
