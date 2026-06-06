@@ -1238,6 +1238,27 @@ function renderKnockout() {
   box.innerHTML = html;
 }
 
+function showModal(message, buttons = []) {
+  const overlay = document.getElementById("modalOverlay");
+  const text = document.getElementById("modalText");
+  const btnBox = document.getElementById("modalButtons");
+
+  text.textContent = message;
+  btnBox.innerHTML = "";
+
+  buttons.forEach(btn => {
+    const b = document.createElement("button");
+    b.textContent = btn.text;
+    b.onclick = () => {
+      overlay.style.display = "none";
+      btn.onClick?.();
+    };
+    btnBox.appendChild(b);
+  });
+
+  overlay.style.display = "flex";
+}
+
 /* ---------------- GLOBAL EXPORTS ---------------- */
 
 window.autoFillResults = autoFillResults;
