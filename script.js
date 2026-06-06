@@ -42,6 +42,7 @@ const DEFAULT_TEAMS = [
 
 const MATCHDAYS = 8;
 const KO_ROUNDS = ["playoffs", "roundOf16", "quarterFinal", "semiFinal", "final"];
+const SEASONS_STORAGE_KEY = "ucl_saved_seasons_v1";
 
 let teams = DEFAULT_TEAMS.map(t => ({ ...t }));
 let fixtures = [];
@@ -52,8 +53,14 @@ let savedResults = {};
 let knockoutState = null;
 let currentRound = null;
 let savedKnockout = {};
+let currentSeasonId = null;
 
 /* ---------------- HELPERS ---------------- */
+
+function cloneData(value) {
+  if (value === undefined) return undefined;
+  return JSON.parse(JSON.stringify(value));
+}
 
 function getPot(team) {
   return teams.find(t => t.name === team)?.pot ?? 4;
@@ -72,17 +79,116 @@ function shuffleArray(arr) {
   return copy;
 }
 
-function simulateMatch(home, away) {
-  const hPot = getPot(home);
-  const aPot = getPot(away);
-  const strength = (aPot - hPot) * 0.12;
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
 
-  const homeScore = Math.random() + strength;
-  const awayScore = Math.random();
+function formatSeasonTime(ts) {
+  try {
+    return new Date(ts).toLocaleString();
+  } catch {
+    return "";
+  }
+}
 
-  if (homeScore > awayScore + 0.18) return "H";
-  if (awayScore > homeScore + 0.18) return "A";
-  return "D";
+function loadSavedSeasons() {
+  try {
+    const raw = localStorage.getItem(SEASONS_STORAGE_KEY);
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveSavedSeasons(seasons) {
+  try {
+    localStorage.setItem(SEASONS_STORAGE_KEY, JSON.stringify(seasons));
+  } catch {
+    alert("Could not save season data in browser storage.");
+  }
+}
+
+function getSavedSeasonById(id) {
+  return loadSavedSeasons().find(s => s.id === id) || null;
+}
+
+function listSavedSeasons() {
+  return loadSavedSeasons().sort((a, b) => {
+    const ta = Number(b.updatedAt || b.createdAt || 0);
+    const tb = Number(a.updatedAt || a.createdAt || 0);
+    return ta - tb;
+  });
+}
+
+function hasCurrentSeasonData() {
+  return (
+    fixtures.length > 0 ||
+    Object.keys(savedResults).length > 0 ||
+    !!knockoutState ||
+    Object.keys(savedKnockout).length > 0
+  );
+}
+
+function createSeasonSnapshot() {
+  return {
+    teams: cloneData(teams),
+    fixtures: cloneData(fixtures),
+    currentMatchday,
+    savedResults: cloneData(savedResults),
+    knockoutState: cloneData(knockoutState),
+    currentRound,
+    savedKnockout: cloneData(savedKnockout),
+    currentPage
+  };
+}
+
+function normalizeCurrentRound(state) {
+  if (!state || !state.knockoutState) return null;
+
+  if (state.currentRound && state.knockoutState[state.currentRound]) {
+    return state.currentRound;
+  }
+
+  for (const round of KO_ROUNDS) {
+    if (state.knockoutState[round]) return round;
+  }
+
+  return null;
+}
+
+function applySeasonSnapshot(record) {
+  const state = record.state || {};
+
+  teams = cloneData(state.teams) || cloneData(DEFAULT_TEAMS);
+  fixtures = cloneData(state.fixtures) || [];
+  currentMatchday = state.currentMatchday || 1;
+  savedResults = cloneData(state.savedResults) || {};
+  knockoutState = cloneData(state.knockoutState) || null;
+  savedKnockout = cloneData(state.savedKnockout) || {};
+
+  currentRound = normalizeCurrentRound(state);
+
+  currentPage =
+    state.currentPage === "knockout" && knockoutState && currentRound
+      ? "knockout"
+      : "league";
+
+  currentSeasonId = record.id;
+}
+
+function renderCurrentPage() {
+  if (currentPage === "knockout" && knockoutState) {
+    showKnockout();
+  } else {
+    currentPage = "league";
+    showLeaguePhase();
+  }
 }
 
 function generateSimulatedScore(home, away) {
@@ -108,7 +214,7 @@ function generatePenaltyScore(teamA, teamB) {
   const aChance = Math.max(0.25, Math.min(0.75, 0.5 + strength));
 
   const teamAWins = Math.random() < aChance;
-  const base = 5 + Math.floor(Math.random() * 3); // 5-4, 6-5, 7-6
+  const base = 5 + Math.floor(Math.random() * 3);
 
   if (teamAWins) {
     return { h: base, a: base - 1 };
@@ -118,6 +224,7 @@ function generatePenaltyScore(teamA, teamB) {
 
 function showLeaguePhase() {
   currentPage = "league";
+
   const league = document.getElementById("leaguePhasePage");
   const knockout = document.getElementById("knockoutPage");
 
@@ -125,10 +232,12 @@ function showLeaguePhase() {
   if (knockout) knockout.style.display = "none";
 
   renderFixtures();
+  calculateTable();
 }
 
 function showKnockout() {
   currentPage = "knockout";
+
   const league = document.getElementById("leaguePhasePage");
   const knockout = document.getElementById("knockoutPage");
 
@@ -145,6 +254,209 @@ function roundLabel(round) {
   if (round === "semiFinal") return "Semi-finals";
   if (round === "final") return "Final";
   return round;
+}
+
+function renderSeasonManager() {
+  const seasons = listSavedSeasons();
+  const currentLabel = currentSeasonId
+    ? (getSavedSeasonById(currentSeasonId)?.name || "Saved season")
+    : "Unsaved working season";
+
+  return `
+    <div style="margin:16px 0; padding:12px; background:#111; border:1px solid #333; border-radius:10px;">
+      <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:10px;">
+        <button onclick="saveSeason()">Save season</button>
+        <button onclick="renameCurrentSeason()" ${currentSeasonId ? "" : "disabled"}>Rename season</button>
+        <button onclick="deleteCurrentSeason()" ${currentSeasonId ? "" : "disabled"}>Delete season</button>
+        <button onclick="resetSeason()">Reset season</button>
+        <button onclick="loadAdjacentSeason(-1)">Previous saved</button>
+        <button onclick="loadAdjacentSeason(1)">Next saved</button>
+        <span style="opacity:0.85; margin-left:8px;">Current: ${escapeHtml(currentLabel)}</span>
+      </div>
+
+      <div style="margin-top:8px;">
+        <div style="font-weight:bold; margin-bottom:6px;">Saved seasons</div>
+        ${
+          seasons.length
+            ? seasons.map(s => {
+                const active = s.id === currentSeasonId ? "background:#1d1d1d;" : "";
+                return `
+                  <div style="display:flex; gap:8px; align-items:center; justify-content:space-between; padding:6px 0; border-top:1px solid #222; ${active}">
+                    <span>
+                      ${escapeHtml(s.name)}
+                      <small style="opacity:0.7;">(${formatSeasonTime(s.updatedAt || s.createdAt)})</small>
+                    </span>
+                    <span style="display:flex; gap:6px; flex-wrap:wrap;">
+                      <button onclick="loadSeason('${s.id}')">Load</button>
+                      <button onclick="renameSeason('${s.id}')">Rename</button>
+                      <button onclick="deleteSeason('${s.id}')">Delete</button>
+                    </span>
+                  </div>
+                `;
+              }).join("")
+            : `<div style="opacity:0.75;">No saved seasons yet.</div>`
+        }
+      </div>
+    </div>
+  `;
+}
+
+/* ---------------- SEASON SAVE / LOAD / RENAME / DELETE ---------------- */
+
+function saveSeason() {
+  const seasons = loadSavedSeasons();
+  const currentEntry = currentSeasonId ? getSavedSeasonById(currentSeasonId) : null;
+  const defaultName = currentEntry?.name || `Season ${seasons.length + 1}`;
+
+  let name = prompt("Save this season as:", defaultName);
+  if (name === null) return;
+
+  name = name.trim();
+  if (!name) {
+    alert("Season name cannot be empty.");
+    return;
+  }
+
+  const record = {
+    id: `season_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    name,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    state: createSeasonSnapshot()
+  };
+
+  seasons.unshift(record);
+  saveSavedSeasons(seasons);
+
+  currentSeasonId = record.id;
+  renderCurrentPage();
+  alert(`Season saved as "${name}".`);
+}
+
+function renameSeason(id) {
+  const seasons = loadSavedSeasons();
+  const entry = seasons.find(s => s.id === id);
+
+  if (!entry) {
+    alert("Season not found.");
+    return;
+  }
+
+  const newName = prompt("Rename season:", entry.name);
+  if (newName === null) return;
+
+  const trimmed = newName.trim();
+  if (!trimmed) {
+    alert("Season name cannot be empty.");
+    return;
+  }
+
+  entry.name = trimmed;
+  entry.updatedAt = Date.now();
+  saveSavedSeasons(seasons);
+
+  renderCurrentPage();
+}
+
+function renameCurrentSeason() {
+  if (!currentSeasonId) {
+    alert("No current saved season is selected.");
+    return;
+  }
+
+  renameSeason(currentSeasonId);
+}
+
+function deleteSeason(id) {
+  const seasons = loadSavedSeasons();
+  const entry = seasons.find(s => s.id === id);
+
+  if (!entry) {
+    alert("Season not found.");
+    return;
+  }
+
+  if (!confirm(`Delete season "${entry.name}"?`)) return;
+
+  const updated = seasons.filter(s => s.id !== id);
+  saveSavedSeasons(updated);
+
+  if (currentSeasonId === id) {
+    currentSeasonId = null;
+  }
+
+  renderCurrentPage();
+}
+
+function deleteCurrentSeason() {
+  if (!currentSeasonId) {
+    alert("No current saved season is selected.");
+    return;
+  }
+
+  deleteSeason(currentSeasonId);
+}
+
+function loadSeason(id) {
+  const entry = getSavedSeasonById(id);
+
+  if (!entry) {
+    alert("Season not found.");
+    return;
+  }
+
+  applySeasonSnapshot(entry);
+  renderCurrentPage();
+}
+
+function loadAdjacentSeason(step) {
+  const seasons = listSavedSeasons();
+
+  if (!seasons.length) {
+    alert("No saved seasons yet.");
+    return;
+  }
+
+  if (!currentSeasonId) {
+    loadSeason(seasons[0].id);
+    return;
+  }
+
+  const index = seasons.findIndex(s => s.id === currentSeasonId);
+  const safeIndex = index >= 0 ? index : 0;
+  const target = seasons[safeIndex + step];
+
+  if (!target) {
+    alert(step < 0 ? "No previous saved season." : "No next saved season.");
+    return;
+  }
+
+  loadSeason(target.id);
+}
+
+function resetSeason() {
+  if (!confirm("Reset the current season results? Fixtures will stay in place.")) {
+    return;
+  }
+
+  savedResults = {};
+  knockoutState = null;
+  currentRound = null;
+  savedKnockout = {};
+  currentPage = "league";
+  currentMatchday = 1;
+  currentSeasonId = null;
+
+  renderCurrentPage();
+}
+
+function hasCurrentSeasonData() {
+  return (
+    fixtures.length > 0 ||
+    Object.keys(savedResults).length > 0 ||
+    !!knockoutState ||
+    Object.keys(savedKnockout).length > 0
+  );
 }
 
 /* ---------------- LEAGUE SAVE / RESET ---------------- */
@@ -169,16 +481,29 @@ function saveMatchday() {
     };
   });
 
-  renderFixtures();
+  renderCurrentPage();
   alert(`Matchday ${currentMatchday} saved.`);
 }
 
 function resetMatchday() {
   delete savedResults[currentMatchday];
-  renderFixtures();
+  renderCurrentPage();
 }
 
 /* ---------------- LEAGUE SIMULATE ---------------- */
+
+function simulateMatch(home, away) {
+  const hPot = getPot(home);
+  const aPot = getPot(away);
+  const strength = (aPot - hPot) * 0.12;
+
+  const homeScore = Math.random() + strength;
+  const awayScore = Math.random();
+
+  if (homeScore > awayScore + 0.18) return "H";
+  if (awayScore > homeScore + 0.18) return "A";
+  return "D";
+}
 
 function simulateLeagueMatchday() {
   const dayFixtures = fixtures.filter(f => f.matchday === currentMatchday);
@@ -207,12 +532,17 @@ function autoFillResults() {
 /* ---------------- LEAGUE DRAW ---------------- */
 
 function generateDraw() {
+  if (hasCurrentSeasonData() && !confirm("Generate a new league phase draw? This will replace the current fixtures and results.")) {
+    return;
+  }
+
   fixtures = [];
   currentMatchday = 1;
   savedResults = {};
   knockoutState = null;
   currentRound = null;
   savedKnockout = {};
+  currentSeasonId = null;
   currentPage = "league";
 
   const maxAttempts = 80;
@@ -281,7 +611,7 @@ function generateDraw() {
 
     if (success && season.length === 144) {
       fixtures = season;
-      showLeaguePhase();
+      renderCurrentPage();
       return;
     }
   }
@@ -294,14 +624,14 @@ function generateDraw() {
 function prevMatchday() {
   if (currentMatchday > 1) {
     currentMatchday--;
-    renderFixtures();
+    renderCurrentPage();
   }
 }
 
 function nextMatchday() {
   if (currentMatchday < MATCHDAYS) {
     currentMatchday++;
-    renderFixtures();
+    renderCurrentPage();
   }
 }
 
@@ -314,7 +644,8 @@ function renderFixtures() {
   const dayFixtures = fixtures.filter(f => f.matchday === currentMatchday);
 
   let html = `
-    <div style="margin:16px; padding:12px; background:#1b1b1b; border-radius:10px;">
+    ${renderSeasonManager()}
+    <div style="margin:16px 0; padding:12px; background:#1b1b1b; border-radius:10px;">
       <button onclick="prevMatchday()">Prev</button>
       <button onclick="nextMatchday()">Next</button>
       <button onclick="saveMatchday()">Save</button>
@@ -546,6 +877,8 @@ function getKnockoutWinnerFromSnapshot(roundName, tie) {
   return snap.pens.h > snap.pens.a ? tie.home : tie.away;
 }
 
+/* ---------------- KNOCKOUT SAVE / SIM / RESET ---------------- */
+
 function simulateKnockoutRound() {
   if (!knockoutState || !currentRound || !knockoutState[currentRound]) {
     alert("Generate the knockout stage first.");
@@ -725,6 +1058,7 @@ function generateKnockout() {
   savedKnockout = {};
   currentRound = "playoffs";
   currentPage = "knockout";
+  currentSeasonId = null;
   showKnockout();
 }
 
@@ -789,6 +1123,7 @@ function renderKnockout() {
 
   if (!knockoutState || !currentRound || !knockoutState[currentRound]) {
     box.innerHTML = `
+      ${renderSeasonManager()}
       <div style="margin:16px; padding:12px; background:#1b1b1b; border-radius:10px;">
         Generate the knockout stage after saving league results.
       </div>
@@ -800,6 +1135,7 @@ function renderKnockout() {
   const canAdvance = isKnockoutRoundComplete(currentRound);
 
   let html = `
+    ${renderSeasonManager()}
     <div style="margin:16px; padding:12px; background:#1b1b1b; border-radius:10px;">
       <h2 style="margin-top:0;">${roundLabel(currentRound)}</h2>
       <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
@@ -919,3 +1255,12 @@ window.prevKnockoutRound = prevKnockoutRound;
 window.saveKnockoutRound = saveKnockoutRound;
 window.resetKnockoutRound = resetKnockoutRound;
 window.simulateKnockoutRound = simulateKnockoutRound;
+
+window.saveSeason = saveSeason;
+window.loadSeason = loadSeason;
+window.renameSeason = renameSeason;
+window.deleteSeason = deleteSeason;
+window.renameCurrentSeason = renameCurrentSeason;
+window.deleteCurrentSeason = deleteCurrentSeason;
+window.resetSeason = resetSeason;
+window.loadAdjacentSeason = loadAdjacentSeason;
