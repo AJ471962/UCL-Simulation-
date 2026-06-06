@@ -823,16 +823,17 @@ function renderTable(sorted) {
   `;
 
   sorted.forEach(([name, s], i) => {
-    let style = "";
-    if (i < 8) style = "background:green;color:white;";
-    else if (i < 24) style = "background:gold;color:black;";
-
+    let rowClass = "";
+if (i < 8) rowClass = "top8";
+else if (i < 24) rowClass = "europa";
+    
     html += `
-      <tr style="${style}">
+      <<tr class="${rowClass}">
         <td>${i + 1}</td>
-        <td style="display:flex; align-items:center; gap:8px; justify-content:center;">
-  <img src="${getLogo(name)}" style="width:22px;height:22px;">
-  <span>${name}</span>
+        <td class="team-name">
+  <img src="logos/${name.toLowerCase().replace(/ /g, "-")}.png" 
+       style="width:18px; height:18px; vertical-align:middle; margin-right:6px;">
+  ${name}
 </td>
         <td>${s.mp}</td>
         <td>${s.w}</td>
