@@ -55,6 +55,34 @@ let currentRound = null;
 let savedKnockout = {};
 let currentSeasonId = null;
 
+function saveAppData() {
+  localStorage.setItem("uclSimulatorData", JSON.stringify({
+    fixtures,
+    currentMatchday,
+    savedResults,
+    knockoutState,
+    currentRound,
+    savedKnockout,
+    currentPage
+  }));
+}
+
+function loadAppData() {
+  const data = localStorage.getItem("uclSimulatorData");
+
+  if (!data) return;
+
+  const saved = JSON.parse(data);
+
+  fixtures = saved.fixtures || [];
+  currentMatchday = saved.currentMatchday || 1;
+  savedResults = saved.savedResults || {};
+  knockoutState = saved.knockoutState || null;
+  currentRound = saved.currentRound || null;
+  savedKnockout = saved.savedKnockout || {};
+  currentPage = saved.currentPage || "league";
+}
+
 /* ---------------- HELPERS ---------------- */
 
 function cloneData(value) {
@@ -482,12 +510,15 @@ function saveMatchday() {
   });
 
   renderCurrentPage();
+  saveAppData();
   alert(`Matchday ${currentMatchday} saved.`);
 }
 
 function resetMatchday() {
   delete savedResults[currentMatchday];
+  
   renderCurrentPage();
+  saveAppData();
 }
 
 /* ---------------- LEAGUE SIMULATE ---------------- */
@@ -615,7 +646,7 @@ function generateDraw() {
       return;
     }
   }
-
+saveAppData();
   alert("Could not generate a balanced season. Try again.");
 }
 
@@ -938,6 +969,7 @@ function simulateKnockoutRound() {
 
 function saveKnockoutRound() {
   if (!knockoutState || !currentRound || !knockoutState[currentRound]) {
+    saveAppData();
     alert("No knockout round to save.");
     return;
   }
@@ -1002,6 +1034,7 @@ function resetKnockoutRound() {
   if (!currentRound) return;
   delete savedKnockout[currentRound];
   renderKnockout();
+  saveAppData();
 }
 
 function resolveKnockoutRound(roundName) {
@@ -1037,6 +1070,7 @@ function generateKnockout() {
   const rankings = computeLeagueStandings();
 
   if (!rankings.length || rankings.every(([, s]) => s.mp === 0)) {
+    saveAppData();
     alert("Save some league results first.");
     return;
   }
@@ -1064,6 +1098,7 @@ function generateKnockout() {
 
 function advanceKnockoutRound() {
   if (!knockoutState || !currentRound) {
+    saveAppData();
     alert("Generate knockout first.");
     return;
   }
@@ -1264,3 +1299,11 @@ window.renameCurrentSeason = renameCurrentSeason;
 window.deleteCurrentSeason = deleteCurrentSeason;
 window.resetSeason = resetSeason;
 window.loadAdjacentSeason = loadAdjacentSeason;
+
+loadAppData();
+
+if (currentPage === "knockout") {
+  showKnockout();
+} else {
+  showLeaguePhase();
+}
