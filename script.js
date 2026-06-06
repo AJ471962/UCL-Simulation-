@@ -63,6 +63,10 @@ let currentSeasonId = null;
   return teams.find(t => t.name === teamName)?.logo || "";
    }
 
+function getLogo(teamName) {
+  return `logos/${teamName.toLowerCase().replace(/ /g, "-")}.png`;
+}
+
 function cloneData(value) {
   if (value === undefined) return undefined;
   return JSON.parse(JSON.stringify(value));
@@ -777,7 +781,10 @@ function renderTable(sorted) {
     html += `
       <tr style="${style}">
         <td>${i + 1}</td>
-        <td>${name}</td>
+        <td style="display:flex; align-items:center; gap:8px; justify-content:center;">
+  <img src="${getLogo(name)}" style="width:22px;height:22px;">
+  <span>${name}</span>
+</td>
         <td>${s.mp}</td>
         <td>${s.w}</td>
         <td>${s.d}</td>
@@ -1173,7 +1180,13 @@ function renderKnockout() {
     if (tie.legs === 1) {
       html += `
         <div style="margin:12px 0; padding:10px; border:1px solid #333; border-radius:8px;">
-          <div style="font-weight:bold; margin-bottom:6px;">${tie.home} vs ${tie.away}</div>
+          <div style="font-weight:bold; margin-bottom:6px; display:flex; align-items:center; gap:10px; justify-content:center;">
+  <img src="${getLogo(tie.home)}" style="width:22px;height:22px;">
+  <span>${tie.home}</span>
+  <span>vs</span>
+  <img src="${getLogo(tie.away)}" style="width:22px;height:22px;">
+  <span>${tie.away}</span>
+</div>
           <div style="margin-bottom:6px;">
             <span>${tie.home}</span>
             <input id="k-${currentRound}-${tie.id}-l1-h" type="number" value="${snap.leg1?.h ?? ""}" style="width:60px;">
