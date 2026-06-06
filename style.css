@@ -332,36 +332,3 @@ button[onclick*="advance"]:not(:disabled) {
     padding: 9px 12px;
   }
 }
-
-#modalOverlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 9999;
-}
-
-#modalBox {
-  background: rgba(15, 20, 35, 0.95);
-  border: 1px solid rgba(255,255,255,0.1);
-  padding: 18px;
-  border-radius: 14px;
-  width: min(360px, 90%);
-  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
-  color: white;
-  text-align: center;
-  animation: fadeInUp 200ms ease;
-}
-
-#modalButtons {
-  margin-top: 12px;
-  display: flex;
-  gap: 10px;
-  justify-content: center;
-}
-
-#modalButtons button {
-  padding: 8px 12px;
-}
