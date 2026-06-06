@@ -103,6 +103,19 @@ function generateSimulatedScore(home, away) {
   return { h, a };
 }
 
+function generatePenaltyScore(teamA, teamB) {
+  const strength = (getPot(teamB) - getPot(teamA)) * 0.08;
+  const aChance = Math.max(0.25, Math.min(0.75, 0.5 + strength));
+
+  const teamAWins = Math.random() < aChance;
+  const base = 5 + Math.floor(Math.random() * 3); // 5-4, 6-5, 7-6
+
+  if (teamAWins) {
+    return { h: base, a: base - 1 };
+  }
+  return { h: base - 1, a: base };
+}
+
 function showLeaguePhase() {
   currentPage = "league";
   const league = document.getElementById("leaguePhasePage");
@@ -123,6 +136,15 @@ function showKnockout() {
   if (knockout) knockout.style.display = "block";
 
   renderKnockout();
+}
+
+function roundLabel(round) {
+  if (round === "playoffs") return "Playoffs";
+  if (round === "roundOf16") return "Round of 16";
+  if (round === "quarterFinal") return "Quarter-finals";
+  if (round === "semiFinal") return "Semi-finals";
+  if (round === "final") return "Final";
+  return round;
 }
 
 /* ---------------- LEAGUE SAVE / RESET ---------------- */
@@ -435,15 +457,6 @@ function renderTable(sorted) {
 
 /* ---------------- KNOCKOUT HELPERS ---------------- */
 
-function roundLabel(round) {
-  if (round === "playoffs") return "Playoffs";
-  if (round === "roundOf16") return "Round of 16";
-  if (round === "quarterFinal") return "Quarter-finals";
-  if (round === "semiFinal") return "Semi-finals";
-  if (round === "final") return "Final";
-  return round;
-}
-
 function createTie(home, away, legs, id) {
   return {
     id,
@@ -476,64 +489,61 @@ function createSequentialTies(list, prefix, legs) {
   return ties;
 }
 
-function decidePenaltyWinner(teamA, teamB) {
-  const strength = (getPot(teamB) - getPot(teamA)) * 0.12;
-  const aScore = Math.random() + strength;
-  const bScore = Math.random();
+function getKnockoutSnapshot(roundName, tie) {
+  const saved = savedKnockout[roundName]?.[tie.id] || {};
 
-  return aScore >= bScore ? teamA : teamB;
+  const leg1 = saved.leg1 || null;
+  const leg2 = tie.legs === 2 ? (saved.leg2 || null) : null;
+  const pens = saved.pens || null;
+
+  let aggregate = null;
+  if (tie.legs === 1) {
+    if (leg1) aggregate = { home: leg1.h, away: leg1.a };
+  } else if (leg1 && leg2) {
+    aggregate = { home: leg1.h + leg2.a, away: leg1.a + leg2.h };
+  }
+
+  const tied = aggregate ? aggregate.home === aggregate.away : false;
+  const complete =
+    tie.legs === 1
+      ? !!leg1 && (!tied || !!pens)
+      : !!leg1 && !!leg2 && (!tied || !!pens);
+
+  return { leg1, leg2, pens, aggregate, tied, complete };
 }
 
-function getKnockoutLegScore(roundName, tie, legNumber, home, away, allowSimulate = true) {
-  if (!savedKnockout[roundName]) savedKnockout[roundName] = {};
-  if (!savedKnockout[roundName][tie.id]) savedKnockout[roundName][tie.id] = {};
+function generatePenaltyScore(teamA, teamB) {
+  const strength = (getPot(teamB) - getPot(teamA)) * 0.08;
+  const aChance = Math.max(0.25, Math.min(0.75, 0.5 + strength));
 
-  const savedLeg = savedKnockout[roundName][tie.id][`leg${legNumber}`];
-  if (savedLeg && typeof savedLeg.h === "number" && typeof savedLeg.a === "number") {
-    return savedLeg;
+  const teamAWins = Math.random() < aChance;
+  const base = 5 + Math.floor(Math.random() * 3);
+
+  if (teamAWins) {
+    return { h: base, a: base - 1 };
   }
-
-  const hEl = document.getElementById(`k-${roundName}-${tie.id}-l${legNumber}-h`);
-  const aEl = document.getElementById(`k-${roundName}-${tie.id}-l${legNumber}-a`);
-
-  if (hEl && aEl && hEl.value !== "" && aEl.value !== "") {
-    const score = { h: Number(hEl.value), a: Number(aEl.value) };
-    savedKnockout[roundName][tie.id][`leg${legNumber}`] = score;
-    return score;
-  }
-
-  if (!allowSimulate) return null;
-
-  const score = generateSimulatedScore(home, away);
-  if (hEl) hEl.value = score.h;
-  if (aEl) aEl.value = score.a;
-
-  savedKnockout[roundName][tie.id][`leg${legNumber}`] = score;
-  return score;
+  return { h: base - 1, a: base };
 }
 
 function isKnockoutRoundComplete(roundName) {
   if (!knockoutState || !roundName || !knockoutState[roundName]) return false;
 
-  const ties = knockoutState[roundName];
-
-  return ties.every(tie => {
-    const saved = savedKnockout[roundName]?.[tie.id];
-    if (!saved) return false;
-
-    if (tie.legs === 1) {
-      return saved.leg1 &&
-        Number.isFinite(saved.leg1.h) &&
-        Number.isFinite(saved.leg1.a);
-    }
-
-    return saved.leg1 &&
-      saved.leg2 &&
-      Number.isFinite(saved.leg1.h) &&
-      Number.isFinite(saved.leg1.a) &&
-      Number.isFinite(saved.leg2.h) &&
-      Number.isFinite(saved.leg2.a);
+  return knockoutState[roundName].every(tie => {
+    const snap = getKnockoutSnapshot(roundName, tie);
+    return snap.complete;
   });
+}
+
+function getKnockoutWinnerFromSnapshot(roundName, tie) {
+  const snap = getKnockoutSnapshot(roundName, tie);
+  if (!snap.complete) return null;
+
+  if (!snap.tied) {
+    return snap.aggregate.home > snap.aggregate.away ? tie.home : tie.away;
+  }
+
+  if (!snap.pens) return null;
+  return snap.pens.h > snap.pens.a ? tie.home : tie.away;
 }
 
 function simulateKnockoutRound() {
@@ -549,21 +559,46 @@ function simulateKnockoutRound() {
       const score = generateSimulatedScore(tie.home, tie.away);
       const hEl = document.getElementById(`k-${currentRound}-${tie.id}-l1-h`);
       const aEl = document.getElementById(`k-${currentRound}-${tie.id}-l1-a`);
-      if (hEl) hEl.value = score.h;
-      if (aEl) aEl.value = score.a;
+
+      if (hEl && hEl.value === "") hEl.value = score.h;
+      if (aEl && aEl.value === "") aEl.value = score.a;
+
+      const aggHome = Number(hEl?.value ?? score.h);
+      const aggAway = Number(aEl?.value ?? score.a);
+
+      if (aggHome === aggAway) {
+        const pens = generatePenaltyScore(tie.home, tie.away);
+        const pH = document.getElementById(`k-${currentRound}-${tie.id}-p-h`);
+        const pA = document.getElementById(`k-${currentRound}-${tie.id}-p-a`);
+
+        if (pH && pH.value === "") pH.value = pens.h;
+        if (pA && pA.value === "") pA.value = pens.a;
+      }
     } else {
-      const leg1 = generateSimulatedScore(tie.home, tie.away);
-      const leg2 = generateSimulatedScore(tie.away, tie.home);
+      const l1 = generateSimulatedScore(tie.home, tie.away);
+      const l2 = generateSimulatedScore(tie.away, tie.home);
 
       const h1 = document.getElementById(`k-${currentRound}-${tie.id}-l1-h`);
       const a1 = document.getElementById(`k-${currentRound}-${tie.id}-l1-a`);
       const h2 = document.getElementById(`k-${currentRound}-${tie.id}-l2-h`);
       const a2 = document.getElementById(`k-${currentRound}-${tie.id}-l2-a`);
 
-      if (h1) h1.value = leg1.h;
-      if (a1) a1.value = leg1.a;
-      if (h2) h2.value = leg2.h;
-      if (a2) a2.value = leg2.a;
+      if (h1 && h1.value === "") h1.value = l1.h;
+      if (a1 && a1.value === "") a1.value = l1.a;
+      if (h2 && h2.value === "") h2.value = l2.h;
+      if (a2 && a2.value === "") a2.value = l2.a;
+
+      const aggHome = Number(h1?.value ?? l1.h) + Number(a2?.value ?? l2.a);
+      const aggAway = Number(a1?.value ?? l1.a) + Number(h2?.value ?? l2.h);
+
+      if (aggHome === aggAway) {
+        const pens = generatePenaltyScore(tie.home, tie.away);
+        const pH = document.getElementById(`k-${currentRound}-${tie.id}-p-h`);
+        const pA = document.getElementById(`k-${currentRound}-${tie.id}-p-a`);
+
+        if (pH && pH.value === "") pH.value = pens.h;
+        if (pA && pA.value === "") pA.value = pens.a;
+      }
     }
   });
 }
@@ -578,18 +613,29 @@ function saveKnockoutRound() {
   if (!savedKnockout[currentRound]) savedKnockout[currentRound] = {};
 
   ties.forEach(tie => {
-    if (!savedKnockout[currentRound][tie.id]) savedKnockout[currentRound][tie.id] = {};
+    if (!savedKnockout[currentRound][tie.id]) {
+      savedKnockout[currentRound][tie.id] = {};
+    }
+
+    const entry = savedKnockout[currentRound][tie.id];
+    const snap = getKnockoutSnapshot(currentRound, tie);
 
     if (tie.legs === 1) {
       const hEl = document.getElementById(`k-${currentRound}-${tie.id}-l1-h`);
       const aEl = document.getElementById(`k-${currentRound}-${tie.id}-l1-a`);
-      if (!hEl || !aEl) return;
-      if (hEl.value === "" || aEl.value === "") return;
 
-      savedKnockout[currentRound][tie.id].leg1 = {
-        h: Number(hEl.value),
-        a: Number(aEl.value)
-      };
+      if (hEl && aEl && hEl.value !== "" && aEl.value !== "") {
+        entry.leg1 = { h: Number(hEl.value), a: Number(aEl.value) };
+      }
+
+      if (snap.tied) {
+        const pH = document.getElementById(`k-${currentRound}-${tie.id}-p-h`);
+        const pA = document.getElementById(`k-${currentRound}-${tie.id}-p-a`);
+
+        if (pH && pA && pH.value !== "" && pA.value !== "") {
+          entry.pens = { h: Number(pH.value), a: Number(pA.value) };
+        }
+      }
     } else {
       const h1 = document.getElementById(`k-${currentRound}-${tie.id}-l1-h`);
       const a1 = document.getElementById(`k-${currentRound}-${tie.id}-l1-a`);
@@ -597,17 +643,20 @@ function saveKnockoutRound() {
       const a2 = document.getElementById(`k-${currentRound}-${tie.id}-l2-a`);
 
       if (h1 && a1 && h1.value !== "" && a1.value !== "") {
-        savedKnockout[currentRound][tie.id].leg1 = {
-          h: Number(h1.value),
-          a: Number(a1.value)
-        };
+        entry.leg1 = { h: Number(h1.value), a: Number(a1.value) };
       }
 
       if (h2 && a2 && h2.value !== "" && a2.value !== "") {
-        savedKnockout[currentRound][tie.id].leg2 = {
-          h: Number(h2.value),
-          a: Number(a2.value)
-        };
+        entry.leg2 = { h: Number(h2.value), a: Number(a2.value) };
+      }
+
+      if (snap.tied) {
+        const pH = document.getElementById(`k-${currentRound}-${tie.id}-p-h`);
+        const pA = document.getElementById(`k-${currentRound}-${tie.id}-p-a`);
+
+        if (pH && pA && pH.value !== "" && pA.value !== "") {
+          entry.pens = { h: Number(pH.value), a: Number(pA.value) };
+        }
       }
     }
   });
@@ -622,49 +671,29 @@ function resetKnockoutRound() {
   renderKnockout();
 }
 
-function resolveKnockoutRound(roundName, allowSimulate = false) {
+function resolveKnockoutRound(roundName) {
   const ties = knockoutState?.[roundName];
   if (!ties) return [];
 
   const winners = [];
 
-  ties.forEach(tie => {
-    if (tie.legs === 1) {
-      const s = getKnockoutLegScore(roundName, tie, 1, tie.home, tie.away, allowSimulate);
-      if (!s) return;
+  for (const tie of ties) {
+    const snap = getKnockoutSnapshot(roundName, tie);
+    if (!snap.complete) return [];
 
-      let winner;
-      if (s.h === s.a) {
-        winner = decidePenaltyWinner(tie.home, tie.away);
-        tie.decidedBy = "pens";
-      } else {
-        winner = s.h > s.a ? tie.home : tie.away;
-        tie.decidedBy = "score";
-      }
+    let winner = null;
 
-      tie.winner = winner;
-      winners.push(winner);
+    if (!snap.tied) {
+      winner = snap.aggregate.home > snap.aggregate.away ? tie.home : tie.away;
+      tie.decidedBy = "agg";
     } else {
-      const l1 = getKnockoutLegScore(roundName, tie, 1, tie.home, tie.away, allowSimulate);
-      const l2 = getKnockoutLegScore(roundName, tie, 2, tie.away, tie.home, allowSimulate);
-      if (!l1 || !l2) return;
-
-      const aggHome = l1.h + l2.a;
-      const aggAway = l1.a + l2.h;
-
-      let winner;
-      if (aggHome === aggAway) {
-        winner = decidePenaltyWinner(tie.home, tie.away);
-        tie.decidedBy = "pens";
-      } else {
-        winner = aggHome > aggAway ? tie.home : tie.away;
-        tie.decidedBy = "agg";
-      }
-
-      tie.winner = winner;
-      winners.push(winner);
+      winner = snap.pens.h > snap.pens.a ? tie.home : tie.away;
+      tie.decidedBy = "pens";
     }
-  });
+
+    tie.winner = winner;
+    winners.push(winner);
+  }
 
   return winners;
 }
@@ -710,7 +739,7 @@ function advanceKnockoutRound() {
     return;
   }
 
-  const winners = resolveKnockoutRound(currentRound, false);
+  const winners = resolveKnockoutRound(currentRound);
   if (!winners.length) {
     alert("No results available for this round.");
     return;
@@ -772,13 +801,17 @@ function renderKnockout() {
 
   let html = `
     <div style="margin:16px; padding:12px; background:#1b1b1b; border-radius:10px;">
-        <h2 style="margin-top:0;">${roundLabel(currentRound)}</h2>
+      <h2 style="margin-top:0;">${roundLabel(currentRound)}</h2>
       <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
         <button onclick="autoFillResults()">Simulate</button>
         <button onclick="saveKnockoutRound()">Save</button>
         <button onclick="resetKnockoutRound()">Reset</button>
         <button onclick="prevKnockoutRound()">Previous Round</button>
-        ${canAdvance ? '<button onclick="advanceKnockoutRound()">Advance Round</button>' : '<span style="padding:6px 0; opacity:0.8;">Save every match in this round to unlock Advance Round.</span>'}
+        ${
+          canAdvance
+            ? '<button onclick="advanceKnockoutRound()">Advance Round</button>'
+            : '<span style="padding:6px 0; opacity:0.8;">Save every match in this round to unlock Advance Round.</span>'
+        }
       </div>
   `;
 
@@ -791,26 +824,37 @@ function renderKnockout() {
   }
 
   round.forEach(tie => {
-    const saved = savedKnockout[currentRound]?.[tie.id] || {};
+    const snap = getKnockoutSnapshot(currentRound, tie);
 
     if (tie.legs === 1) {
-      const l1 = saved.leg1 || {};
       html += `
         <div style="margin:12px 0; padding:10px; border:1px solid #333; border-radius:8px;">
           <div style="font-weight:bold; margin-bottom:6px;">${tie.home} vs ${tie.away}</div>
-          <div>
+          <div style="margin-bottom:6px;">
             <span>${tie.home}</span>
-            <input id="k-${currentRound}-${tie.id}-l1-h" type="number" value="${l1.h ?? ""}" style="width:60px;">
+            <input id="k-${currentRound}-${tie.id}-l1-h" type="number" value="${snap.leg1?.h ?? ""}" style="width:60px;">
             -
-            <input id="k-${currentRound}-${tie.id}-l1-a" type="number" value="${l1.a ?? ""}" style="width:60px;">
+            <input id="k-${currentRound}-${tie.id}-l1-a" type="number" value="${snap.leg1?.a ?? ""}" style="width:60px;">
             <span>${tie.away}</span>
           </div>
+          <div style="margin-top:6px;">
+            Aggregate: ${snap.aggregate ? `${snap.aggregate.home}-${snap.aggregate.away}` : "-"}
+          </div>
+          ${
+            snap.tied
+              ? `
+                <div style="margin-top:8px; padding-top:8px; border-top:1px dashed #555;">
+                  Penalties:
+                  <input id="k-${currentRound}-${tie.id}-p-h" type="number" value="${snap.pens?.h ?? ""}" style="width:60px;">
+                  -
+                  <input id="k-${currentRound}-${tie.id}-p-a" type="number" value="${snap.pens?.a ?? ""}" style="width:60px;">
+                </div>
+              `
+              : ""
+          }
         </div>
       `;
     } else {
-      const leg1 = saved.leg1 || {};
-      const leg2 = saved.leg2 || {};
-
       html += `
         <div style="margin:12px 0; padding:10px; border:1px solid #333; border-radius:8px;">
           <div style="font-weight:bold; margin-bottom:8px;">${tie.home} vs ${tie.away}</div>
@@ -818,20 +862,37 @@ function renderKnockout() {
           <div style="margin-bottom:6px;">
             Leg 1:
             <span>${tie.home}</span>
-            <input id="k-${currentRound}-${tie.id}-l1-h" type="number" value="${leg1.h ?? ""}" style="width:60px;">
+            <input id="k-${currentRound}-${tie.id}-l1-h" type="number" value="${snap.leg1?.h ?? ""}" style="width:60px;">
             -
-            <input id="k-${currentRound}-${tie.id}-l1-a" type="number" value="${leg1.a ?? ""}" style="width:60px;">
+            <input id="k-${currentRound}-${tie.id}-l1-a" type="number" value="${snap.leg1?.a ?? ""}" style="width:60px;">
             <span>${tie.away}</span>
           </div>
 
-          <div>
+          <div style="margin-bottom:6px;">
             Leg 2:
             <span>${tie.away}</span>
-            <input id="k-${currentRound}-${tie.id}-l2-h" type="number" value="${leg2.h ?? ""}" style="width:60px;">
+            <input id="k-${currentRound}-${tie.id}-l2-h" type="number" value="${snap.leg2?.h ?? ""}" style="width:60px;">
             -
-            <input id="k-${currentRound}-${tie.id}-l2-a" type="number" value="${leg2.a ?? ""}" style="width:60px;">
+            <input id="k-${currentRound}-${tie.id}-l2-a" type="number" value="${snap.leg2?.a ?? ""}" style="width:60px;">
             <span>${tie.home}</span>
           </div>
+
+          <div style="margin-top:6px;">
+            Aggregate: ${snap.aggregate ? `${snap.aggregate.home}-${snap.aggregate.away}` : "-"}
+          </div>
+
+          ${
+            snap.tied
+              ? `
+                <div style="margin-top:8px; padding-top:8px; border-top:1px dashed #555;">
+                  Penalties:
+                  <input id="k-${currentRound}-${tie.id}-p-h" type="number" value="${snap.pens?.h ?? ""}" style="width:60px;">
+                  -
+                  <input id="k-${currentRound}-${tie.id}-p-a" type="number" value="${snap.pens?.a ?? ""}" style="width:60px;">
+                </div>
+              `
+              : ""
+          }
         </div>
       `;
     }
