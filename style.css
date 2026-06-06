@@ -346,10 +346,10 @@ table td.team-name {
 
 /* Top 8 (green background) */
 table tr.top8 td {
-  color: #007F00;
+  color: #ffffff;
 }
 
 /* 9–24 (gold background) */
 table tr.europa td {
-  color: #FED600;
+  color: #ffffff;
 }
