@@ -147,6 +147,7 @@ function saveMatchday() {
     };
   });
 
+  renderFixtures();
   alert(`Matchday ${currentMatchday} saved.`);
 }
 
@@ -449,7 +450,8 @@ function createTie(home, away, legs, id) {
     home,
     away,
     legs,
-    winner: null
+    winner: null,
+    decidedBy: null
   };
 }
 
@@ -474,11 +476,12 @@ function createSequentialTies(list, prefix, legs) {
   return ties;
 }
 
-function decideWinnerAfterDraw(home, away) {
-  const result = simulateMatch(home, away);
-  if (result === "H") return home;
-  if (result === "A") return away;
-  return Math.random() < 0.5 ? home : away;
+function decidePenaltyWinner(teamA, teamB) {
+  const strength = (getPot(teamB) - getPot(teamA)) * 0.12;
+  const aScore = Math.random() + strength;
+  const bScore = Math.random();
+
+  return aScore >= bScore ? teamA : teamB;
 }
 
 function getKnockoutLegScore(roundName, tie, legNumber, home, away, allowSimulate = true) {
@@ -509,7 +512,31 @@ function getKnockoutLegScore(roundName, tie, legNumber, home, away, allowSimulat
   return score;
 }
 
-function simulateCurrentKnockoutRound() {
+function isKnockoutRoundComplete(roundName) {
+  if (!knockoutState || !roundName || !knockoutState[roundName]) return false;
+
+  const ties = knockoutState[roundName];
+
+  return ties.every(tie => {
+    const saved = savedKnockout[roundName]?.[tie.id];
+    if (!saved) return false;
+
+    if (tie.legs === 1) {
+      return saved.leg1 &&
+        Number.isFinite(saved.leg1.h) &&
+        Number.isFinite(saved.leg1.a);
+    }
+
+    return saved.leg1 &&
+      saved.leg2 &&
+      Number.isFinite(saved.leg1.h) &&
+      Number.isFinite(saved.leg1.a) &&
+      Number.isFinite(saved.leg2.h) &&
+      Number.isFinite(saved.leg2.a);
+  });
+}
+
+function simulateKnockoutRound() {
   if (!knockoutState || !currentRound || !knockoutState[currentRound]) {
     alert("Generate the knockout stage first.");
     return;
@@ -519,14 +546,26 @@ function simulateCurrentKnockoutRound() {
 
   ties.forEach(tie => {
     if (tie.legs === 1) {
-      getKnockoutLegScore(currentRound, tie, 1, tie.home, tie.away, true);
+      const score = generateSimulatedScore(tie.home, tie.away);
+      const hEl = document.getElementById(`k-${currentRound}-${tie.id}-l1-h`);
+      const aEl = document.getElementById(`k-${currentRound}-${tie.id}-l1-a`);
+      if (hEl) hEl.value = score.h;
+      if (aEl) aEl.value = score.a;
     } else {
-      getKnockoutLegScore(currentRound, tie, 1, tie.home, tie.away, true);
-      getKnockoutLegScore(currentRound, tie, 2, tie.away, tie.home, true);
+      const leg1 = generateSimulatedScore(tie.home, tie.away);
+      const leg2 = generateSimulatedScore(tie.away, tie.home);
+
+      const h1 = document.getElementById(`k-${currentRound}-${tie.id}-l1-h`);
+      const a1 = document.getElementById(`k-${currentRound}-${tie.id}-l1-a`);
+      const h2 = document.getElementById(`k-${currentRound}-${tie.id}-l2-h`);
+      const a2 = document.getElementById(`k-${currentRound}-${tie.id}-l2-a`);
+
+      if (h1) h1.value = leg1.h;
+      if (a1) a1.value = leg1.a;
+      if (h2) h2.value = leg2.h;
+      if (a2) a2.value = leg2.a;
     }
   });
-
-  renderKnockout();
 }
 
 function saveKnockoutRound() {
@@ -573,6 +612,7 @@ function saveKnockoutRound() {
     }
   });
 
+  renderKnockout();
   alert(`${roundLabel(currentRound)} saved.`);
 }
 
@@ -582,7 +622,7 @@ function resetKnockoutRound() {
   renderKnockout();
 }
 
-function resolveKnockoutRound(roundName, allowSimulate = true) {
+function resolveKnockoutRound(roundName, allowSimulate = false) {
   const ties = knockoutState?.[roundName];
   if (!ties) return [];
 
@@ -595,9 +635,11 @@ function resolveKnockoutRound(roundName, allowSimulate = true) {
 
       let winner;
       if (s.h === s.a) {
-        winner = decideWinnerAfterDraw(tie.home, tie.away);
+        winner = decidePenaltyWinner(tie.home, tie.away);
+        tie.decidedBy = "pens";
       } else {
         winner = s.h > s.a ? tie.home : tie.away;
+        tie.decidedBy = "score";
       }
 
       tie.winner = winner;
@@ -612,9 +654,11 @@ function resolveKnockoutRound(roundName, allowSimulate = true) {
 
       let winner;
       if (aggHome === aggAway) {
-        winner = decideWinnerAfterDraw(tie.home, tie.away);
+        winner = decidePenaltyWinner(tie.home, tie.away);
+        tie.decidedBy = "pens";
       } else {
         winner = aggHome > aggAway ? tie.home : tie.away;
+        tie.decidedBy = "agg";
       }
 
       tie.winner = winner;
@@ -661,7 +705,12 @@ function advanceKnockoutRound() {
     return;
   }
 
-  const winners = resolveKnockoutRound(currentRound, true);
+  if (!isKnockoutRoundComplete(currentRound)) {
+    alert("Save every match in this round before advancing.");
+    return;
+  }
+
+  const winners = resolveKnockoutRound(currentRound, false);
   if (!winners.length) {
     alert("No results available for this round.");
     return;
@@ -719,16 +768,17 @@ function renderKnockout() {
   }
 
   const round = knockoutState[currentRound];
+  const canAdvance = isKnockoutRoundComplete(currentRound);
 
   let html = `
     <div style="margin:16px; padding:12px; background:#1b1b1b; border-radius:10px;">
-      <h2 style="margin-top:0;">${roundLabel(currentRound)}</h2>
+        <h2 style="margin-top:0;">${roundLabel(currentRound)}</h2>
       <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
         <button onclick="autoFillResults()">Simulate</button>
         <button onclick="saveKnockoutRound()">Save</button>
         <button onclick="resetKnockoutRound()">Reset</button>
         <button onclick="prevKnockoutRound()">Previous Round</button>
-        <button onclick="advanceKnockoutRound()">Advance Round</button>
+        ${canAdvance ? '<button onclick="advanceKnockoutRound()">Advance Round</button>' : '<span style="padding:6px 0; opacity:0.8;">Save every match in this round to unlock Advance Round.</span>'}
       </div>
   `;
 
@@ -807,3 +857,4 @@ window.advanceKnockoutRound = advanceKnockoutRound;
 window.prevKnockoutRound = prevKnockoutRound;
 window.saveKnockoutRound = saveKnockoutRound;
 window.resetKnockoutRound = resetKnockoutRound;
+window.simulateKnockoutRound = simulateKnockoutRound;
